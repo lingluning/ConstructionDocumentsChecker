@@ -111,8 +111,11 @@
   .nm{font-weight:600}
   .lvltag{font-family:var(--mono);font-size:10px;padding:1px 4px;border-radius:2px;margin-right:7px;
     color:#fff;flex-shrink:0;letter-spacing:.04em}
-  .kindtag{font-size:11px;color:var(--ink-soft);border:1px solid var(--rule);border-radius:2px;
-    padding:1px 6px;margin-left:9px;white-space:nowrap;flex-shrink:0;letter-spacing:.1em;background:#fff}
+  .kindtag{font-size:10px;border:1px solid;border-radius:2px;
+    padding:0 5px;margin-left:8px;white-space:nowrap;flex-shrink:0;letter-spacing:.08em}
+  .kindtag.k1{color:var(--c1);border-color:var(--c1);background:rgba(44,62,80,.06)}
+  .kindtag.k2{color:var(--c2);border-color:var(--c2);background:rgba(31,111,107,.06)}
+  .kindtag.k3{color:var(--c3);border-color:var(--c3);background:rgba(122,92,46,.08)}
   .lv1>.namecell .nm{font-weight:800;font-size:15.5px}
   .lv2>.namecell .nm{font-weight:700}
   .lv1{background:rgba(44,62,80,.045)}
@@ -1149,7 +1152,7 @@ function renderTree(){
         `<td><div class="namecell" style="padding-left:${10+indent}px">
             <span class="toggle ${hasKids?'':'leaf'}" data-tog>${hasKids?'−':''}</span>
             <span class="lvltag" style="background:${colors[(n.level-1)%6]}">${esc(lbl.slice(0,2))}</span>
-            <span class="nm">${esc(n.name)}</span>${LEVEL_KIND[n.level-1]?`<span class="kindtag">${esc(LEVEL_KIND[n.level-1])}</span>`:''}</div></td>`;
+            <span class="nm">${esc(n.name)}</span>${LEVEL_KIND[n.level-1]?`<span class="kindtag k${n.level}">${esc(LEVEL_KIND[n.level-1])}</span>`:''}</div></td>`;
       if(C.spec)cells+=`<td class="cell spec">${esc(n.spec)}</td>`;
       if(C.qty)cells+=`<td class="cell num">${esc(n.qty)}</td>`;
       if(C.unit)cells+=`<td class="cell">${esc(n.unit)}</td>`;
