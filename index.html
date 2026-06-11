@@ -88,6 +88,10 @@
   table.tree tbody td{padding:0;border-bottom:1px solid var(--grid);vertical-align:middle}
   table.tree tbody tr:hover{background:var(--hl)}
   table.tree tbody tr.hidden{display:none}
+  /* 数値列は右余白を広げ、摘要列は左余白で隣の金額と分離（表頭・データ共通で整列）*/
+  table.tree th.num,table.tree td.cell.num,table.tree td.cell.money{padding-right:22px}
+  table.tree th.col-note,table.tree td.col-note{padding-left:22px}
+  table.tree.hide-money .col-price,table.tree.hide-money .col-money{display:none}
   @keyframes rowin{from{opacity:0}to{opacity:1}}
   table.tree tbody tr.reveal{animation:rowin .25s ease}
   @media(prefers-reduced-motion:reduce){table.tree tbody tr.reveal{animation:none}}
@@ -175,6 +179,7 @@
     <button id="expandAll">全展開</button>
     <button id="collapseAll">全収束</button>
     <button id="diagBtn">解析レポート</button>
+    <button id="moneyBtn">単価・金額を隠す</button>
     <span class="grow"></span>
     <input type="search" id="search" placeholder="名称・規格で絞り込み…">
     <span class="stat" id="stat"></span>
@@ -1043,7 +1048,7 @@ function buildModel(pages){
 }
 
 /* ═══ レンダリング ═══ */
-let CUR_LEVEL=99,ROWREF=[],MAXLV=1,LEVEL_LABELS=[];
+let CUR_LEVEL=99,ROWREF=[],MAXLV=1,LEVEL_LABELS=[],HIDE_MONEY=false;
 function flatten(nodes,arr=[]){for(const n of nodes){arr.push(n);if(n.children)flatten(n.children,arr);}return arr;}
 function render(pages){
   prog.style.display='none';drop.style.display='none';app.style.display='flex';
@@ -1122,9 +1127,9 @@ function renderTree(){
   if(C.spec)th+='<th>規格</th>';
   if(C.qty)th+='<th class="num">数量</th>';
   if(C.unit)th+='<th>単位</th>';
-  if(C.price)th+='<th class="num">単価</th>';
-  if(C.money)th+='<th class="num">金額</th>';
-  if(C.note)th+='<th>計算式・摘要</th>';
+  if(C.price)th+='<th class="num col-price">単価</th>';
+  if(C.money)th+='<th class="num col-money">金額</th>';
+  if(C.note)th+='<th class="col-note">計算式・摘要</th>';
   if(C.ref)th+='<th>単価表</th>';
   document.getElementById('treeHead').innerHTML=th+'</tr>';
   const tb=document.getElementById('treeBody');tb.innerHTML='';ROWREF=[];
@@ -1145,9 +1150,9 @@ function renderTree(){
       if(C.spec)cells+=`<td class="cell spec">${esc(n.spec)}</td>`;
       if(C.qty)cells+=`<td class="cell num">${esc(n.qty)}</td>`;
       if(C.unit)cells+=`<td class="cell">${esc(n.unit)}</td>`;
-      if(C.price)cells+=`<td class="cell num">${esc(n.price)}</td>`;
-      if(C.money)cells+=`<td class="cell money">${esc(n.money)}</td>`;
-      if(C.note)cells+=`<td class="cell note">${esc(trunc(n.note,60))}</td>`;
+      if(C.price)cells+=`<td class="cell num col-price">${esc(fmtNum(n.price))}</td>`;
+      if(C.money)cells+=`<td class="cell money col-money">${esc(fmtNum(n.money))}</td>`;
+      if(C.note)cells+=`<td class="cell note col-note">${esc(trunc(n.note,60))}</td>`;
       if(C.ref)cells+=`<td class="cell">${n.tanka?`<span class="tanka-link ${MODEL.tanka[n.tanka]?'':'dead'}" data-tanka="${esc(n.tanka)}">${esc(n.tanka)}</span>`:''}</td>`;
       tr.innerHTML=cells;
       tb.appendChild(tr);
@@ -1204,6 +1209,15 @@ function bindToolbar(){
   document.getElementById('expandAll').onclick=()=>applyLevel(MAXLV);
   document.getElementById('collapseAll').onclick=()=>applyLevel(1);
   document.getElementById('diagBtn').onclick=()=>document.getElementById('diagPanel').classList.toggle('show');
+  const mb=document.getElementById('moneyBtn');
+  mb.style.display=(TREECOLS.price||TREECOLS.money)?'':'none';
+  const syncMoney=()=>{
+    mb.textContent=HIDE_MONEY?'単価・金額を表示':'単価・金額を隠す';
+    const t=document.querySelector('#mainHolder table.tree');
+    if(t)t.classList.toggle('hide-money',HIDE_MONEY);
+  };
+  mb.onclick=()=>{HIDE_MONEY=!HIDE_MONEY;syncMoney();};
+  syncMoney();
   const sb=document.getElementById('search');
   sb.oninput=()=>{const q=sb.value.trim().toLowerCase();
     if(!q){ROWREF.forEach(r=>r._searchHidden=false);applyLevel(CUR_LEVEL);return;}
@@ -1239,7 +1253,7 @@ function openTanka(key){
       const noteHtml=L.ref&&MODEL.tanka[L.ref]
         ?esc(L.note||'')+` <span class="tanka-link" data-tanka="${esc(L.ref)}">${esc(L.ref)}</span>`
         :esc(L.note||L.ref||'');
-      html+=`<tr><td>${esc(L.nm)}</td><td>${esc(L.sp)}</td><td class="num">${esc(L.q)}</td><td>${esc(L.u)}</td><td class="num">${esc(L.pr)}</td><td class="num">${esc(L.mo)}</td><td>${noteHtml}</td></tr>`;
+      html+=`<tr><td>${esc(L.nm)}</td><td>${esc(L.sp)}</td><td class="num">${esc(L.q)}</td><td>${esc(L.u)}</td><td class="num">${esc(fmtNum(L.pr))}</td><td class="num">${esc(fmtNum(L.mo))}</td><td>${noteHtml}</td></tr>`;
     }
     html+='</tbody></table>';
   }else{
@@ -1254,6 +1268,8 @@ function openTanka(key){
 /* utils */
 function esc(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function trunc(s,n){s=s||'';return s.length>n?s.slice(0,n)+'…':s;}
+/* 区切りなしの裸数値（4桁以上）に千位区切りを付与。既に区切り済み・数値以外はそのまま */
+function fmtNum(s){const t=stripSp(z2h(s||''));return /^\d{4,}$/.test(t)?(+t).toLocaleString('ja-JP'):(s||'');}
 </script>
 </body>
 </html>
