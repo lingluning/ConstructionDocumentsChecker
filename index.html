@@ -588,6 +588,7 @@ function parseBreakdown(pages,M,DIAG){
   DIAG.layouts=[...layouts.values()];
   M.tree=buildTree(rawItems,DIAG);
   mergeFragments(M.tree);
+  normalizeLevels(M.tree,1);
 }
 const NOISE_RE=/^(設計)?内訳書$|^内訳表$|^明細書$|^見積書$|国土交通省|地方整備局|県土整備|^\(当\s*初\)|^\(第?\s*\d+\s*回変更\)/;
 function isNoiseRow(r){
@@ -768,6 +769,17 @@ function mergeFragments(nodes){
   }
 }
 function allChildArrays(nodes,out=[]){out.push(nodes);for(const n of nodes)if(n.children&&n.children.length)allChildArrays(n.children,out);return out;}
+
+/* ── 表示レベルの正規化: 解析時の推定レベル（インデントクラスタ等）に
+   外れ値や欠落があると最上位が L2 から始まる等のズレが生じるため、
+   木構造の実際の深さで振り直す（最上位=L1）。レベルボタンの
+   展開／収束も見た目の階層と常に一致する。 ── */
+function normalizeLevels(nodes,lv){
+  for(const n of nodes){
+    n.level=lv;
+    if(n.children&&n.children.length)normalizeLevels(n.children,lv+1);
+  }
+}
 
 /* ═══ 単価表解析（汎用：表頭学習＋ブロック分割）═══ */
 function parseTanka(pages,M,DIAG){
@@ -1011,8 +1023,9 @@ function bindToolbar(){
     b.dataset.lv=i;b.textContent=trunc(LEVEL_LABELS[i-1]||('L'+i),4);
     b.onclick=()=>applyLevel(i);lb.appendChild(b);
   }
-  document.getElementById('expandAll').onclick=()=>{ROWREF.forEach(r=>{r.collapsed=false;
-    const t=r.tr.querySelector('[data-tog]');if(t&&!t.classList.contains('leaf'))t.textContent='−';});recompute();};
+  // レベル正規化後は親ノードのレベルは必ず MAXLV 未満のため、これで全行が展開され
+  // レベルボタンのハイライト・表示件数も同期する
+  document.getElementById('expandAll').onclick=()=>applyLevel(MAXLV);
   document.getElementById('collapseAll').onclick=()=>applyLevel(1);
   document.getElementById('diagBtn').onclick=()=>document.getElementById('diagPanel').classList.toggle('show');
   const sb=document.getElementById('search');
