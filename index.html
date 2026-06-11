@@ -88,6 +88,9 @@
   table.tree tbody td{padding:0;border-bottom:1px solid var(--grid);vertical-align:middle}
   table.tree tbody tr:hover{background:var(--hl)}
   table.tree tbody tr.hidden{display:none}
+  @keyframes rowin{from{opacity:0}to{opacity:1}}
+  table.tree tbody tr.reveal{animation:rowin .25s ease}
+  @media(prefers-reduced-motion:reduce){table.tree tbody tr.reveal{animation:none}}
   .cell{padding:6px 10px}
   .cell.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
   .cell.spec{color:var(--ink-soft);font-size:12px}
@@ -1125,6 +1128,7 @@ function renderTree(){
   if(C.ref)th+='<th>単価表</th>';
   document.getElementById('treeHead').innerHTML=th+'</tr>';
   const tb=document.getElementById('treeBody');tb.innerHTML='';ROWREF=[];
+  tb.addEventListener('animationend',e=>{if(e.target&&e.target.classList)e.target.classList.remove('reveal');});
   const colors=['var(--c1)','var(--c2)','var(--c3)','var(--c4)','var(--c5)','var(--c6)'];
   const walk=(nodes,depth,ancestors)=>{
     for(const n of nodes){
@@ -1165,8 +1169,12 @@ function toggleNode(ref){
 }
 function recompute(){
   for(const r of ROWREF){
-    const hidden=r.ancestors.some(a=>a.collapsed);
-    r.tr.classList.toggle('hidden',hidden||r._searchHidden);
+    // !! で真偽値化必須: classList.toggle の第2引数に undefined を渡すと
+    // 「強制OFF」ではなく「反転」になり、クリックの度に表示が壊れる
+    const hide=!!(r.ancestors.some(a=>a.collapsed)||r._searchHidden);
+    const was=r.tr.classList.contains('hidden');
+    r.tr.classList.toggle('hidden',hide);
+    if(was&&!hide)r.tr.classList.add('reveal'); // 出現アニメーション（animationendで除去）
   }
   updateStat();
 }
