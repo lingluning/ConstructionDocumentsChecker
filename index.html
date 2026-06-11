@@ -153,10 +153,10 @@
 <div id="drop" tabindex="0" role="button" aria-label="設計書PDFを選択またはドロップ">
   <div id="dropInner">
     <div class="big">⤓</div>
-    <h2>設計書PDFをドロップ</h2>
+    <h2>設計書PDF・CSVをドロップ</h2>
     <p>国交省・都道府県・市町村・民間見積など各種様式の工事設計書を自動解析。<br>
        表頭行から<b>列位置を自動学習</b>し、<b>分列式／インデント式</b>の両方の階層構造に対応。<br>
-       内訳書ツリー表示＋単価表（単価表・代価表・施工単価）リンク。</p>
+       Gaia等の積算ソフトが出力する<b>CSV（工事総括表・内訳表）</b>の取込みにも対応。</p>
     <div class="hint">ここをクリック、またはファイルをドラッグ＆ドロップ</div>
   </div>
   <div id="prog">
@@ -164,7 +164,7 @@
     <div class="bar"><i id="progBar"></i></div>
   </div>
 </div>
-<input type="file" id="fileInput" accept="application/pdf">
+<input type="file" id="fileInput" accept="application/pdf,.pdf,.csv,text/csv">
 
 <div id="app">
   <div class="toolbar">
@@ -373,12 +373,19 @@ document.getElementById('reset').onclick=()=>location.reload();
 let ENGINE='PDF.js',BUSY=false;
 async function handleFile(file){
   if(BUSY)return; // 解析中の多重投入を防止
-  if(file.type!=='application/pdf'&&!file.name.toLowerCase().endsWith('.pdf')){
-    showErr('PDFファイルを選択してください。');return;}
+  const nm=file.name.toLowerCase();
+  const isCsv=nm.endsWith('.csv')||file.type==='text/csv';
+  const isPdf=file.type==='application/pdf'||nm.endsWith('.pdf');
+  if(!isCsv&&!isPdf){showErr('PDFまたはCSVファイルを選択してください。');return;}
   BUSY=true;clearErr();
   dropInner.style.display='none';prog.style.display='block';progBar.style.width='0';
   try{
     const buf=await file.arrayBuffer();
+    if(isCsv){
+      progTxt.textContent='CSV解析中…';progBar.style.width='50%';
+      buildModelFromCSV(decodeText(buf));
+      return;
+    }
     const raw=new Uint8Array(buf);
     ENGINE='PDF.js';
     let pages=[];
@@ -863,6 +870,152 @@ function parseTanka(pages,M,DIAG){
   flush();
 }
 
+/* ═══ CSV取込（Gaia等の積算ソフト出力）═══
+   2形式を自動判別:
+   (a) 表形式: 既知の列見出し（名称/数量/単位/金額等）を持つ内訳表CSV。
+       階層は 複数名称列（費目/工種/種別/細別）・レベル列・先頭空白字下げ のいずれか。
+   (b) 総括形式: 「項目名,値」のキーバリュー型（工事総括表）。
+       工事概要＋費目構成・要素構成・工事内容をツリー化。 */
+function decodeText(buf){
+  let t;
+  try{t=new TextDecoder('utf-8',{fatal:true}).decode(buf);}
+  catch(e){t=new TextDecoder('shift_jis').decode(buf);}
+  return t.replace(/^\uFEFF/,'');
+}
+function parseCSV(text){
+  const out=[];let row=[],cell='',q=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(q){
+      if(ch==='"'){if(text[i+1]==='"'){cell+='"';i++;}else q=false;}
+      else cell+=ch;
+    }else{
+      if(ch==='"')q=true;
+      else if(ch===','){row.push(cell);cell='';}
+      else if(ch==='\n'){row.push(cell);out.push(row);row=[];cell='';}
+      else if(ch!=='\r')cell+=ch;
+    }
+  }
+  if(cell!==''||row.length)
+    {row.push(cell);out.push(row);}
+  return out;
+}
+function buildModelFromCSV(text){
+  MODEL={summary:{},tree:[],tanka:{}};
+  DIAG={pages:{},layouts:[],levelCenters:new Map(),warnings:[],engine:'CSV',sections:[]};
+  const recs=parseCSV(text).filter(r=>r.some(c=>c&&c.trim()));
+  DIAG.pages={CSV行:recs.length};
+  // 表形式判定: 既知の列見出しを含む行を先頭40行から探す
+  let hdrIdx=-1;
+  for(let i=0;i<Math.min(recs.length,40);i++){
+    const fams=recs[i].map(c=>famOf(c));
+    const named=fams.filter(Boolean);
+    if(fams.includes('name')&&(fams.includes('qty')||fams.includes('amount'))&&new Set(named).size>=3){hdrIdx=i;break;}
+  }
+  if(hdrIdx>=0)csvTable(recs,hdrIdx);
+  else csvSokatsu(recs);
+  if(!MODEL.tree.length&&!Object.keys(MODEL.summary).length){
+    showErr('CSVから内容を読み取れませんでした。積算ソフトの工事総括表または内訳表形式のCSVをご利用ください。');
+    return;
+  }
+  if(!MODEL.tree.length)
+    DIAG.warnings.push('CSVから階層を構成できませんでした。工事概要のみ表示します');
+  render([]);
+}
+/* (a) 表形式CSV → ツリー */
+function csvTable(recs,hdrIdx){
+  const hdr=recs[hdrIdx];
+  const nameCols=[],colFam={};
+  hdr.forEach((c,j)=>{const f=famOf(c);if(f==='name')nameCols.push(j);if(f&&f!=='other')colFam[j]=f;});
+  const lvlCol=hdr.findIndex(c=>/^(レベル|階層|階層レベル|LV)$/i.test(stripSp(z2h(c||''))));
+  DIAG.layouts=[{anchors:hdr.map((c,j)=>({family:colFam[j]||'other',label:stripSp(c)||('列'+(j+1)),x:j})).filter(a=>a.family!=='other'),
+    columnMode:nameCols.length>=2,nameAnchors:nameCols.map(j=>({label:stripSp(hdr[j])}))}];
+  const root={children:[]};const stack=[{node:root,level:0}];
+  for(let i=hdrIdx+1;i<recs.length;i++){
+    const row=recs[i];
+    let name='',lv=1;
+    if(nameCols.length>=2){
+      let deepest=-1;
+      nameCols.forEach((j,k)=>{if(row[j]&&row[j].trim()){name=row[j].trim();deepest=k;}});
+      if(deepest<0)continue;
+      lv=deepest+1;
+    }else{
+      const raw=row[nameCols[0]]||'';
+      if(!raw.trim())continue;
+      const lead=raw.match(/^[\s　]*/)[0];
+      lv=1+Math.round([...lead].reduce((a,ch)=>a+(ch==='　'?1:0.5),0));
+      name=raw.trim();
+    }
+    if(lvlCol>=0&&/^\d+$/.test(stripSp(z2h(row[lvlCol]||''))))lv=+stripSp(z2h(row[lvlCol]));
+    const node=mkNode(name,lv,1);
+    for(const j in colFam){
+      const f=colFam[j],v=(row[j]||'').trim();
+      if(!v||f==='name')continue;
+      if(f==='spec')node.spec=(node.spec+' '+v).trim();
+      else if(f==='unit')node.unit=v;
+      else if(f==='qty')node.qty=v;
+      else if(f==='price')node.price=v;
+      else if(f==='amount')node.money=v;
+      else{node.note=(node.note+' '+v).trim();}
+    }
+    if(!node.tanka){const r=findRef(node.note);if(r)node.tanka=r;}
+    while(stack.length&&stack[stack.length-1].level>=lv)stack.pop();
+    (stack.length?stack[stack.length-1].node:root).children.push(node);
+    stack.push({node,level:lv});
+  }
+  MODEL.tree=root.children;
+  normalizeLevels(MODEL.tree,1);
+}
+/* (b) 総括形式CSV → 工事概要＋構成ツリー */
+function csvSokatsu(recs){
+  const S=MODEL.summary;
+  const get={};
+  for(const r of recs){
+    const k=stripSp(z2h(r[0]||''));
+    if(k&&get[k]===undefined)get[k]=(r[1]||'').trim();
+  }
+  const map=[['工事名','工事名'],['施工場所','工事地名'],['工事場所','工事地名'],
+    ['発注者','発注者'],['工事の種類','主工種'],['予定価格','予定価格'],['工事価格','工事価格']];
+  for(const [src,dst] of map)if(get[src]&&!S[dst])S[dst]=get[src];
+  const uke=get['落札企業']||get['会社名'];
+  if(uke)S['受注者']=uke;
+  const d1=get['施工期間(自)'],d2=get['施工期間(至)'],dn=get['施工日数'];
+  if(d1||d2||dn)S['工期']=[d1,d2].filter(Boolean).join('〜')+(dn?`（${dn}日間）`:'');
+  const root=[];
+  // 工事内容: 【…】を親、字下げ行を子としてツリー化
+  if(get['工事内容']){
+    const sec=mkNode('工事内容',1,1);
+    let grp=null;
+    for(const line of get['工事内容'].split(/\n/)){
+      const t=line.trim();if(!t)continue;
+      if(/^[【〔\[]/.test(t)){grp=mkNode(t,2,1);sec.children.push(grp);}
+      else if(/^[\s　]/.test(line)&&grp)grp.children.push(mkNode(t,3,1));
+      else sec.children.push(mkNode(t,2,1));
+    }
+    if(sec.children.length)root.push(sec);
+  }
+  // 費目・要素ブロック: 「費目,9」のように件数が続く行の直後N行が (名称,金額,比率)
+  const SECDEF={'費目':'工事費構成（費目）','要素':'要素別内訳（材料費・労務費等）'};
+  for(let i=0;i<recs.length;i++){
+    const k=stripSp(z2h(recs[i][0]||''));
+    if(!(k in SECDEF))continue;
+    const n=parseInt(stripSp(z2h(recs[i][1]||'')),10);
+    if(!n||n>500)continue;
+    const sec=mkNode(SECDEF[k],1,1);
+    for(let j=i+1;j<Math.min(i+1+n,recs.length);j++){
+      const r=recs[j];
+      if(!r[0]||!r[0].trim())break;
+      const it=mkNode(r[0].trim(),2,1);
+      it.money=(r[1]||'').trim();
+      it.note=(r[2]||'').trim();
+      sec.children.push(it);
+    }
+    if(sec.children.length)root.push(sec);
+  }
+  MODEL.tree=root;
+  normalizeLevels(MODEL.tree,1);
+}
+
 /* ═══ モデル構築 ═══ */
 let MODEL={summary:{},tree:[],tanka:{}};
 let DIAG={pages:{},layouts:[],levelCenters:new Map(),warnings:[]};
@@ -927,7 +1080,7 @@ function render(pages){
 }
 function renderSummary(){
   const s=MODEL.summary;const holder=document.getElementById('summaryHolder');
-  const fields=['工事名','工事地名','発注者','受注者','事務所','工期','主工種'];
+  const fields=['工事名','工事地名','発注者','受注者','事務所','工期','主工種','予定価格','工事価格'];
   let rows='';
   for(const k of fields)if(s[k])rows+=`<div class="row"><span class="k">${k}</span><span class="v">${esc(s[k])}</span></div>`;
   holder.innerHTML=rows?`<div class="summary"><h3>工事概要 ／ PROJECT OVERVIEW</h3><div class="grid">${rows}</div></div>`:'';
