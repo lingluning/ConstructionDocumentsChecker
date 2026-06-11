@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>工事設計書 階層ビューア v2｜汎用解析エンジン</title>
+<title>工事設計書 階層ビューア v3｜汎用解析エンジン</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
   :root{
@@ -144,7 +144,7 @@
 </head>
 <body>
 <header>
-  <span class="mark">設計書 TREE v2</span>
+  <span class="mark">設計書 TREE v3</span>
   <h1>工事設計書 階層ビューア <small>UNIVERSAL PARSER</small></h1>
   <div class="spacer"></div>
   <div class="meta-pill" id="hdrMeta"></div>
@@ -233,7 +233,7 @@ function findRef(s){
 
 /* ── 表頭ファミリ判定（列名の同義語族）── */
 const FAM_RULES=[
-  ['name', /^(名称|費目|工種|種別|細別|細目|項目|項目名|品名|内容|工事区分|工種名称|費目名称|科目)$|工事区分・|費目・工種|^名\s*称$/],
+  ['name', /^(名称|費目|工種|種別|細別|細目|項目|項目名|品名|内容|工事区分|工種名称|費目名称|科目|施工名称|名称・規格|名称規格)$|工事区分・|費目・工種|・施工名称|^名\s*称$/],
   ['spec', /^(規格|形状寸法|仕様|規格・寸法|型式|規格形状|規格・形状|形状規格|形状)$/],
   ['unit', /^(単位)$/],
   ['qty',  /^(数量|員数)$/],
@@ -383,7 +383,12 @@ async function handleFile(file){
     ENGINE='PDF.js';
     let pages=[];
     try{
-      const pdf=await pdfjsLib.getDocument({data:raw.slice()}).promise;
+      // CMap/標準フォント設定: 90ms-RKSJ-H 等の日本語エンコーディングや
+      // フォント非埋込のPDF（Gaia等の積算ソフト出力に多い）でも抽出できるようにする
+      const pdf=await pdfjsLib.getDocument({data:raw.slice(),
+        cMapUrl:'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',cMapPacked:true,
+        standardFontDataUrl:'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/standard_fonts/',
+        useSystemFonts:true}).promise;
       const N=pdf.numPages;
       for(let i=1;i<=N;i++){
         progBar.style.width=(i/N*100)+'%';
@@ -553,6 +558,9 @@ function parseBreakdown(pages,M,DIAG){
             if(!DIAG.sections.includes(section))DIAG.sections.push(section);}
         }
       }
+      // 表頭を持つページでは、表頭より上は帳票タイトル・頁番号等の繰返し領域。
+      // 前ページのレイアウトでデータ化すると空の重複ノードになるためスキップ。
+      if(i<firstHdr&&headers.length)continue;
       if(headerIdx.has(i)){layout=makeLayout(headerIdx.get(i).anchors);layouts.set(layout.key,layout);continue;}
       if(consumed.has(i))continue;
       if(!layout)continue;
@@ -600,6 +608,8 @@ function isNoiseRow(r){
   if(/[（(]\d+\/\d+[)）]$/.test(j))return true;          // ページネーション "(1/2)"
   if(/^[A-Za-z]{1,4}\d{3,}$/.test(j))return true;       // 帳票コード "SK68013"
   if(/^(事業区分|工事区分)[^・]/.test(j)&&j.length<24)return true;
+  if(/^頁[0-9０-９]/.test(j))return true;                // 頁番号 "頁0-0001"
+  if(/^[一-龥]{2,4}[都道府県][0-9０-９\-－]*$/.test(j))return true; // フッタの発注機関名＋工事番号
   return false;
 }
 function rowToFields(row,layout){
@@ -613,11 +623,16 @@ function rowToFields(row,layout){
       if(a.family!=='name')continue;
     }
     switch(a.family){
-      case 'name':
-        if(f.nameX===null)f.nameX=c.x;
+      case 'name':{
+        // 先頭空白で字下げするソフト（x座標が一定のままのGaia系帳票等）に対応:
+        // 全角空白≈1文字幅、半角空白≈0.5文字幅としてxに加算
+        const lead=c.str.match(/^[\s　]*/)[0];
+        const fw=c.fs||10;
+        const xe=c.x+[...lead].reduce((a,ch)=>a+(ch==='　'?fw:fw*0.5),0);
+        if(f.nameX===null)f.nameX=xe;
         f.name+=(f.name?' ':'')+s;
-        f.nameParts.push({x:c.x,s});
-        break;
+        f.nameParts.push({x:xe,s});
+        break;}
       case 'spec': f.spec+=s+' ';break;
       case 'unit':
         if(isUnitToken(s))f.unit+=s;
