@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>工事設計書 階層ビューア v2｜汎用解析エンジン</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root{
+    --ink:#1a1814;--ink-soft:#4a463e;--paper:#f7f4ec;--paper-line:#e3ddcf;
+    --accent:#d4622a;--accent-deep:#a8481c;--rule:#cfc7b4;--grid:#e8e2d3;--hl:#fbeede;
+    --c1:#2c3e50;--c2:#1f6f6b;--c3:#7a5c2e;--c4:#6b6155;--c5:#5d4a7a;--c6:#7a4a55;
+    --mono:'SF Mono',ui-monospace,'DejaVu Sans Mono','Roboto Mono',monospace;
+    --jp:'Hiragino Kaku Gothic ProN','Yu Gothic','Meiryo',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:var(--jp);color:var(--ink);background:var(--paper);
+    font-feature-settings:"palt";-webkit-font-smoothing:antialiased;
+    display:flex;flex-direction:column;height:100vh;overflow:hidden}
+  header{border-bottom:2px solid var(--ink);padding:14px 22px 12px;
+    display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;
+    background:repeating-linear-gradient(45deg,transparent,transparent 7px,rgba(212,98,42,.04) 7px,rgba(212,98,42,.04) 8px),var(--paper)}
+  header .mark{font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:var(--accent-deep);
+    border:1.5px solid var(--accent);padding:2px 7px;border-radius:2px;white-space:nowrap}
+  header h1{font-size:17px;font-weight:800;letter-spacing:.04em}
+  header h1 small{font-weight:500;color:var(--ink-soft);font-size:11px;letter-spacing:.12em;font-family:var(--mono)}
+  header .spacer{flex:1}
+  .meta-pill{font-family:var(--mono);font-size:11px;color:var(--ink-soft);display:flex;gap:14px;flex-wrap:wrap}
+  .meta-pill b{color:var(--ink);font-weight:700}
+
+  #drop{flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;
+    margin:30px;border:2px dashed var(--rule);border-radius:6px;transition:.18s;text-align:center;padding:40px;cursor:pointer}
+  #drop.hot{border-color:var(--accent);background:var(--hl)}
+  #drop:focus-visible{outline:none;border-color:var(--accent)}
+  #drop .big{font-size:46px;color:var(--accent);margin-bottom:14px;line-height:1}
+  #drop h2{font-size:18px;margin-bottom:8px}
+  #drop p{color:var(--ink-soft);font-size:13px;line-height:1.8;max-width:480px}
+  #drop .hint{margin-top:16px;font-family:var(--mono);font-size:11px;color:var(--rule);letter-spacing:.1em}
+  #fileInput{display:none}
+  #prog{display:none;text-align:center}
+  #prog .bar{width:280px;height:5px;background:var(--paper-line);border-radius:3px;overflow:hidden;margin:16px auto 0}
+  #prog .bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+  #prog .txt{font-family:var(--mono);font-size:12px;color:var(--ink-soft);margin-top:10px;letter-spacing:.05em}
+
+  #app{display:none;flex:1;min-height:0;flex-direction:column}
+  .toolbar{display:flex;align-items:center;gap:10px;padding:8px 22px;
+    border-bottom:1px solid var(--rule);background:var(--paper);flex-wrap:wrap}
+  .toolbar button{font-family:var(--jp);font-size:12px;border:1px solid var(--rule);
+    background:#fff;color:var(--ink);padding:5px 11px;border-radius:3px;cursor:pointer;transition:.12s}
+  .toolbar button:hover{border-color:var(--accent);color:var(--accent-deep)}
+  .toolbar .lvl-btns{display:flex;gap:0;border:1px solid var(--rule);border-radius:3px;overflow:hidden}
+  .toolbar .lvl-btns button{border:none;border-right:1px solid var(--rule);border-radius:0;padding:5px 9px}
+  .toolbar .lvl-btns button:last-child{border-right:none}
+  .toolbar .lvl-btns button.on{background:var(--accent);color:#fff}
+  .toolbar input[type=search]{font-family:var(--jp);font-size:12px;padding:5px 10px;
+    border:1px solid var(--rule);border-radius:3px;width:220px;background:#fff}
+  .toolbar input[type=search]:focus{outline:none;border-color:var(--accent)}
+  .toolbar .grow{flex:1}
+  .toolbar .stat{font-family:var(--mono);font-size:11px;color:var(--ink-soft)}
+  #scroll{flex:1;overflow:auto;padding:0 0 60px}
+
+  .summary{margin:18px 22px 6px;border:1px solid var(--rule);border-left:4px solid var(--accent);
+    background:#fff;border-radius:4px;padding:14px 18px}
+  .summary h3{font-size:13px;letter-spacing:.08em;color:var(--accent-deep);margin-bottom:10px;font-family:var(--mono)}
+  .summary .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px 24px}
+  .summary .row{display:flex;font-size:12.5px;border-bottom:1px dotted var(--paper-line);padding:3px 0}
+  .summary .row .k{color:var(--ink-soft);width:96px;flex-shrink:0}
+  .summary .row .v{font-weight:600}
+
+  /* 診断パネル */
+  .diag{margin:8px 22px;border:1px dashed var(--rule);background:#fffdf7;border-radius:4px;
+    padding:12px 16px;font-size:12px;display:none}
+  .diag.show{display:block}
+  .diag h4{font-family:var(--mono);font-size:11px;color:var(--accent-deep);letter-spacing:.1em;margin:8px 0 4px}
+  .diag h4:first-child{margin-top:0}
+  .diag .kv{font-family:var(--mono);font-size:11px;color:var(--ink-soft);line-height:1.9}
+  .diag .warn{color:var(--accent-deep);font-weight:600}
+  .diag .colchip{display:inline-block;border:1px solid var(--grid);border-radius:2px;
+    padding:1px 6px;margin:2px 3px 2px 0;font-family:var(--mono);font-size:10px;background:#fff}
+
+  .tablewrap{margin:14px 22px}
+  table.tree{width:100%;border-collapse:collapse;font-size:12.5px;background:#fff;
+    border:1px solid var(--rule);border-radius:4px;overflow:hidden}
+  table.tree thead th{background:var(--ink);color:var(--paper);font-weight:600;font-size:11px;
+    letter-spacing:.06em;padding:8px 10px;text-align:left;position:sticky;top:0;z-index:5}
+  table.tree thead th.num{text-align:right}
+  table.tree tbody td{padding:0;border-bottom:1px solid var(--grid);vertical-align:middle}
+  table.tree tbody tr:hover{background:var(--hl)}
+  table.tree tbody tr.hidden{display:none}
+  .cell{padding:6px 10px}
+  .cell.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .cell.spec{color:var(--ink-soft);font-size:12px}
+  .cell.note{max-width:320px;white-space:normal;font-size:11.5px;color:var(--ink-soft);line-height:1.5}
+  .cell.money{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;font-weight:600;white-space:nowrap}
+  .namecell{position:relative;display:flex;align-items:center;white-space:nowrap}
+  .toggle{width:16px;height:16px;flex-shrink:0;margin-right:6px;border:1px solid var(--rule);
+    border-radius:3px;display:flex;align-items:center;justify-content:center;cursor:pointer;
+    font-family:var(--mono);font-size:11px;line-height:1;color:var(--ink-soft);background:#fff;
+    user-select:none;transition:.1s}
+  .toggle:hover{border-color:var(--accent);color:var(--accent)}
+  .toggle.leaf{border:none;background:none;cursor:default;color:var(--rule)}
+  .toggle.leaf::after{content:"・"}
+  .nm{font-weight:600}
+  .lvltag{font-family:var(--mono);font-size:9px;padding:1px 4px;border-radius:2px;margin-right:7px;
+    color:#fff;flex-shrink:0;letter-spacing:.04em}
+  .lv1>.namecell .nm{font-weight:800;font-size:13.5px}
+  .lv2>.namecell .nm{font-weight:700}
+  .lv1{background:rgba(44,62,80,.045)}
+  .lv2{background:rgba(31,111,107,.03)}
+  .tanka-link{font-family:var(--mono);font-size:11px;color:var(--accent-deep);
+    border:1px solid var(--accent);border-radius:2px;padding:1px 6px;cursor:pointer;
+    text-decoration:none;white-space:nowrap;transition:.1s}
+  .tanka-link:hover{background:var(--accent);color:#fff}
+  .tanka-link.dead{border-color:var(--rule);color:var(--rule);cursor:default}
+
+  #modal{display:none;position:fixed;inset:0;background:rgba(26,24,20,.55);z-index:50;
+    align-items:center;justify-content:center;padding:30px}
+  #modal.show{display:flex}
+  #modal .panel{background:var(--paper);border-radius:6px;max-width:780px;width:100%;max-height:86vh;
+    overflow:auto;border:2px solid var(--ink);box-shadow:0 18px 60px rgba(0,0,0,.3)}
+  #modal .phead{position:sticky;top:0;background:var(--ink);color:var(--paper);padding:12px 18px;
+    display:flex;align-items:center;gap:12px;z-index:2}
+  #modal .phead .tag{font-family:var(--mono);background:var(--accent);padding:2px 8px;border-radius:2px;font-size:12px}
+  #modal .phead h3{font-size:14px;flex:1}
+  #modal .phead .x{cursor:pointer;font-size:20px;line-height:1;padding:0 4px}
+  #modal .pbody{padding:16px 18px}
+  #modal table.tk{width:100%;border-collapse:collapse;font-size:12px;background:#fff;border:1px solid var(--rule)}
+  #modal table.tk th{background:var(--paper-line);padding:6px 8px;text-align:left;font-size:11px;font-weight:700}
+  #modal table.tk th.num{text-align:right}
+  #modal table.tk td{padding:5px 8px;border-bottom:1px solid var(--grid)}
+  #modal table.tk td.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+  #modal .tkmeta{font-family:var(--mono);font-size:11px;color:var(--ink-soft);margin-bottom:12px;line-height:1.8}
+  #modal .raw{white-space:pre-wrap;font-family:var(--mono);font-size:11px;color:var(--ink-soft);
+    background:#fff;border:1px solid var(--grid);border-radius:4px;padding:10px;margin-top:8px;max-height:240px;overflow:auto}
+  .err{margin:30px;padding:16px;border:1px solid var(--accent);background:var(--hl);
+    border-radius:4px;color:var(--accent-deep);font-size:13px;line-height:1.7}
+  .rawpage{margin:14px 22px;border:1px solid var(--rule);background:#fff;border-radius:4px;padding:12px}
+  .rawpage h4{font-family:var(--mono);font-size:11px;color:var(--ink-soft);margin-bottom:6px}
+  .rawpage pre{white-space:pre-wrap;font-family:var(--mono);font-size:11px;line-height:1.6;color:var(--ink)}
+  .footnote{font-family:var(--mono);font-size:10px;color:var(--rule);text-align:center;padding:14px;letter-spacing:.08em}
+  @media(max-width:680px){.cell.spec,.summary{display:none}.toolbar input[type=search]{width:130px}}
+</style>
+</head>
+<body>
+<header>
+  <span class="mark">設計書 TREE v2</span>
+  <h1>工事設計書 階層ビューア <small>UNIVERSAL PARSER</small></h1>
+  <div class="spacer"></div>
+  <div class="meta-pill" id="hdrMeta"></div>
+</header>
+
+<div id="drop" tabindex="0" role="button" aria-label="設計書PDFを選択またはドロップ">
+  <div id="dropInner">
+    <div class="big">⤓</div>
+    <h2>設計書PDFをドロップ</h2>
+    <p>国交省・都道府県・市町村・民間見積など各種様式の工事設計書を自動解析。<br>
+       表頭行から<b>列位置を自動学習</b>し、<b>分列式／インデント式</b>の両方の階層構造に対応。<br>
+       内訳書ツリー表示＋単価表（単価表・代価表・施工単価）リンク。</p>
+    <div class="hint">ここをクリック、またはファイルをドラッグ＆ドロップ</div>
+  </div>
+  <div id="prog">
+    <div class="txt" id="progTxt">読み込み中…</div>
+    <div class="bar"><i id="progBar"></i></div>
+  </div>
+</div>
+<input type="file" id="fileInput" accept="application/pdf">
+
+<div id="app">
+  <div class="toolbar">
+    <div class="lvl-btns" id="lvlBtns"></div>
+    <button id="expandAll">全展開</button>
+    <button id="collapseAll">全収束</button>
+    <button id="diagBtn">解析レポート</button>
+    <span class="grow"></span>
+    <input type="search" id="search" placeholder="名称・規格で絞り込み…">
+    <span class="stat" id="stat"></span>
+    <button id="reset">別のPDF</button>
+  </div>
+  <div id="scroll">
+    <div id="summaryHolder"></div>
+    <div class="diag" id="diagPanel"></div>
+    <div id="mainHolder"></div>
+    <div class="footnote">純フロントエンド・PDF.js解析 ／ データはブラウザ内で完結し外部送信されません</div>
+  </div>
+</div>
+
+<div id="modal">
+  <div class="panel">
+    <div class="phead">
+      <span class="tag" id="mTag"></span>
+      <h3 id="mTitle"></h3>
+      <span class="x" id="mClose">×</span>
+    </div>
+    <div class="pbody" id="mBody"></div>
+  </div>
+</div>
+
+<script>
+/* CDN読込失敗時もページ全体が死なないようガード（PDF.js不在ならMuPDF代替へフォールバック）*/
+if(window.pdfjsLib)pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+/* ═════════════════════════════════════════════════════════════════
+   汎用解析エンジン v2
+   方針: 座標を固定せず、各ページの「表頭行」から列レイアウトを学習。
+   階層は (a)分列式: 費目|工種|種別|細別 が別カラム → 列番号=階層
+          (b)インデント式: 単一名称カラム内の字下げをクラスタ化
+   の2モードを自動判別。
+   ═════════════════════════════════════════════════════════════════ */
+
+/* ── 文字正規化 ── */
+const z2h=s=>(s||'').replace(/[０-９Ａ-Ｚａ-ｚ]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0))
+  .replace(/[（]/g,'(').replace(/[）]/g,')');
+const stripSp=s=>(s||'').replace(/[\s　]+/g,'');
+const NUMRE=/^[\d,.\s()▲△\-%]+$/;
+const isNumeric=s=>{const t=z2h(stripSp(s));return t!==''&&NUMRE.test(t)&&/\d/.test(t);};
+
+/* ── 参照番号（単価表リンク）─ 単/代/施/内/明/複/別-N号 系 ── */
+const REF_RE=/([単代施タ内明複別])\s*[-－‐ー―—]?\s*(\d{1,4})\s*号/;
+const REF_RE2=/(単価表|代価表|明細表|施工単価|内訳書|明細書)\s*第?\s*(\d{1,4})\s*号|第\s*(\d{1,4})\s*号\s*(単価表|代価表|明細表|内訳書|明細書)/;
+const REF_PREFIX_MAP={'単価表':'単','代価表':'代','明細表':'明','施工単価':'施','内訳書':'内','明細書':'明'};
+function findRef(s){
+  const t=z2h(s);
+  let m=t.match(REF_RE);
+  if(m)return m[1]+'-'+(+m[2])+'号';
+  m=t.match(REF_RE2);
+  if(m){
+    const pf=REF_PREFIX_MAP[m[1]||m[4]]||'単';
+    return pf+'-'+(+(m[2]||m[3]))+'号';
+  }
+  return '';
+}
+
+/* ── 表頭ファミリ判定（列名の同義語族）── */
+const FAM_RULES=[
+  ['name', /^(名称|費目|工種|種別|細別|細目|項目|項目名|品名|内容|工事区分|工種名称|費目名称|科目)$|工事区分・|費目・工種|^名\s*称$/],
+  ['spec', /^(規格|形状寸法|仕様|規格・寸法|型式|規格形状|規格・形状|形状規格|形状)$/],
+  ['unit', /^(単位)$/],
+  ['qty',  /^(数量|員数)$/],
+  ['price',/^(単価|単価\(円\))$/],
+  ['amount',/^(金額|金額\(円\)|価格|金\s*額)$/],
+  ['note', /^(摘要|備考|適用)$/],
+  ['calc', /^(計算式|計算)$/],
+];
+function famOf(cellStr){
+  const t=stripSp(z2h(cellStr));
+  if(!t)return null;
+  for(const [f,re] of FAM_RULES)if(re.test(t))return f;
+  return null;
+}
+/* アンカー候補抽出: 均等割付（1文字ずつのセル）対応の連結試行つき */
+function anchorCandidates(row){
+  const cells=row.cells.filter(c=>c.str.trim());
+  const anchors=[];let i=0;
+  while(i<cells.length){
+    const f1=famOf(cells[i].str);
+    if(f1){anchors.push({x:cells[i].x,family:f1,label:stripSp(cells[i].str)});i++;continue;}
+    // 連結試行: 最大4セル、最長一致を採用
+    let acc='',best=null,bestK=-1;
+    for(let k=i;k<Math.min(i+4,cells.length);k++){
+      acc+=cells[k].str.trim();
+      if(stripSp(acc).length>6)break;
+      const f=famOf(acc);
+      if(f){best={x:cells[i].x,family:f,label:stripSp(acc)};bestK=k;}
+    }
+    if(best){anchors.push(best);i=bestK+1;}
+    else{anchors.push({x:cells[i].x,family:'other',label:cells[i].str.trim()});i++;}
+  }
+  return anchors;
+}
+function qualifies(anchors){
+  const fams=new Set(anchors.filter(a=>a.family!=='other').map(a=>a.family));
+  const named=anchors.filter(a=>a.family!=='other');
+  return fams.has('name')&&(fams.has('qty')||fams.has('amount'))&&fams.size>=3&&named.length>=3;
+}
+function dedupeAnchors(anchors){
+  const sorted=[...anchors].sort((a,b)=>a.x-b.x||(a.family==='other'?1:-1));
+  const out=[];
+  for(const a of sorted){
+    const prev=out[out.length-1];
+    if(prev&&Math.abs(a.x-prev.x)<8){
+      if(prev.family==='other'&&a.family!=='other')out[out.length-1]=a;
+      continue;
+    }
+    out.push(a);
+  }
+  return out;
+}
+/* 単一行ヘッダ判定（単価表用）*/
+function detectHeader(row){
+  const a=anchorCandidates(row);
+  return qualifies(a)?a.sort((x,y)=>x.x-y.x):null;
+}
+/* 複数行に分かれたヘッダ（総括表等）の縫合つきスキャン
+   戻り値: {headers:[{idx,anchors}], consumed:Set(行idx)} */
+function scanHeaders(rows){
+  const headers=[];const consumed=new Set();
+  let buf=[];
+  for(let i=0;i<rows.length;i++){
+    const cand=anchorCandidates(rows[i]);
+    const named=cand.filter(a=>a.family!=='other');
+    if(!named.length){
+      if(buf.length&&rows[i].y-buf[buf.length-1].y>50)buf=[];
+      continue;
+    }
+    if(qualifies(cand)){headers.push({idx:i,anchors:dedupeAnchors(cand)});consumed.add(i);buf=[];continue;}
+    buf.push({y:rows[i].y,idx:i,cand});
+    buf=buf.filter(b=>rows[i].y-b.y<=50);
+    const merged=dedupeAnchors(buf.flatMap(b=>b.cand));
+    if(qualifies(merged)){
+      headers.push({idx:i,anchors:merged});
+      buf.forEach(b=>consumed.add(b.idx));
+      buf=[];
+    }
+  }
+  return {headers,consumed};
+}
+/* レイアウト: アンカー間に境界を設定。数値系列(qty/price/amount)のデータは
+   右寄せでラベルxより右に伸びるため、右側境界を非対称に拡張する。 */
+function makeLayout(anchors){
+  anchors=[...anchors].sort((a,b)=>a.x-b.x);
+  const NUMFAM=new Set(['qty','price','amount']);
+  const bs=[];
+  for(let i=0;i<anchors.length-1;i++){
+    const mid=(anchors[i].x+anchors[i+1].x)/2;
+    if(NUMFAM.has(anchors[i].family))
+      bs.push(Math.min(anchors[i+1].x-2,Math.max(mid,anchors[i].x+70)));
+    else bs.push(mid);
+  }
+  const nameAnchors=anchors.filter(a=>a.family==='name');
+  const key=anchors.map(a=>a.family+':'+Math.round(a.x/25)).join('|');
+  return {anchors,bs,nameAnchors,key,
+    columnMode:nameAnchors.length>=2,
+    colOf(x){let i=0;while(i<bs.length&&x>=bs[i])i++;return anchors[i];},
+    nameLevelOf(x){let best=0,bd=1e9;nameAnchors.forEach((a,i)=>{const d=Math.abs(x-a.x);if(d<bd){bd=d;best=i;}});return best+1;}
+  };
+}
+/* ヘッダ未検出時のフォールバック: 数値セルのx分布から右側3クラスタを qty/price/amount と推定 */
+function fallbackLayout(pages){
+  const numXs=[],txtXs=[];
+  for(const p of pages)for(const it of p.items){
+    if(isNumeric(it.str))numXs.push(Math.round(it.x));
+    else if(it.str.trim())txtXs.push(Math.round(it.x));
+  }
+  if(!numXs.length||!txtXs.length)return null;
+  const cl=xs=>{const u=[...new Set(xs)].sort((a,b)=>a-b);const cs=[];let g=[u[0]];
+    for(let i=1;i<u.length;i++){if(u[i]-u[i-1]<=25)g.push(u[i]);else{cs.push(g.reduce((s,x)=>s+x,0)/g.length);g=[u[i]];}}
+    cs.push(g.reduce((s,x)=>s+x,0)/g.length);return cs;};
+  const nc=cl(numXs);const right3=nc.slice(-3);
+  const minTxt=Math.min(...txtXs);
+  const anchors=[{x:minTxt,family:'name',label:'名称(推定)'}];
+  const specX=(minTxt+right3[0])/2;
+  anchors.push({x:specX,family:'spec',label:'規格(推定)'});
+  const fams=right3.length===3?['qty','price','amount']:right3.length===2?['qty','amount']:['amount'];
+  right3.forEach((x,i)=>anchors.push({x,family:fams[i],label:fams[i]+'(推定)'}));
+  return makeLayout(anchors);
+}
+
+/* ═══ PDF読み込み ═══ */
+const drop=document.getElementById('drop'),fileInput=document.getElementById('fileInput'),
+  dropInner=document.getElementById('dropInner'),prog=document.getElementById('prog'),
+  progBar=document.getElementById('progBar'),progTxt=document.getElementById('progTxt'),
+  app=document.getElementById('app');
+drop.addEventListener('click',()=>fileInput.click());
+drop.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fileInput.click();}});
+drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('hot')});
+drop.addEventListener('dragleave',()=>drop.classList.remove('hot'));
+drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('hot');
+  if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);});
+fileInput.addEventListener('change',e=>{if(e.target.files[0])handleFile(e.target.files[0]);e.target.value='';});
+document.getElementById('reset').onclick=()=>location.reload();
+
+let ENGINE='PDF.js',BUSY=false;
+async function handleFile(file){
+  if(BUSY)return; // 解析中の多重投入を防止
+  if(file.type!=='application/pdf'&&!file.name.toLowerCase().endsWith('.pdf')){
+    showErr('PDFファイルを選択してください。');return;}
+  BUSY=true;clearErr();
+  dropInner.style.display='none';prog.style.display='block';progBar.style.width='0';
+  try{
+    const buf=await file.arrayBuffer();
+    const raw=new Uint8Array(buf);
+    ENGINE='PDF.js';
+    let pages=[];
+    try{
+      const pdf=await pdfjsLib.getDocument({data:raw.slice()}).promise;
+      const N=pdf.numPages;
+      for(let i=1;i<=N;i++){
+        progBar.style.width=(i/N*100)+'%';
+        progTxt.textContent=`ページ解析 ${i} / ${N}`;
+        const page=await pdf.getPage(i);
+        const vp=page.getViewport({scale:1,rotation:page.rotate||0});
+        const tc=await page.getTextContent();
+        const items=tc.items.map(it=>{
+          const tx=pdfjsLib.Util.transform(vp.transform,it.transform);
+          const fs=Math.hypot(tx[2],tx[3])||10;
+          return {str:it.str,x:tx[4],y:tx[5],fs};
+        }).filter(o=>o.str.trim()!=='');
+        pages.push({num:i,items,h:vp.height,w:vp.width});
+      }
+    }catch(e){console.warn('PDF.js失敗:',e);pages=[];}
+    // テキスト層がほぼ空（フォント資源破損等）→ MuPDF代替エンジン
+    const total=pages.reduce((s,p)=>s+p.items.length,0);
+    if(!pages.length||total<pages.length){
+      progTxt.textContent='代替エンジン(MuPDF)で再抽出中…';progBar.style.width='30%';
+      try{
+        const m=await loadMupdf();
+        pages=mupdfExtract(m,raw);
+        ENGINE='MuPDF(WASM)';
+      }catch(e2){
+        console.error(e2);
+        showErr('テキスト層を抽出できませんでした（スキャン画像、または特殊なフォント構造の可能性）。OCR処理されたPDFをご利用ください。');
+        return;
+      }
+    }
+    buildModel(pages);
+  }catch(err){console.error(err);showErr('解析に失敗しました: '+err.message);}
+  finally{BUSY=false;}
+}
+/* MuPDF WASM 代替エンジン（フォント資源が壊れたPDF向け）*/
+async function loadMupdf(){
+  if(window.__mupdf)return window.__mupdf;
+  const urls=[
+    'https://cdn.jsdelivr.net/npm/mupdf@1/dist/mupdf.js',
+    'https://unpkg.com/mupdf@1/dist/mupdf.js',
+  ];
+  let lastErr;
+  for(const u of urls){
+    try{window.__mupdf=await import(u);return window.__mupdf;}
+    catch(e){lastErr=e;}
+  }
+  throw lastErr||new Error('MuPDF読込失敗');
+}
+function mupdfExtract(mupdf,raw){
+  const doc=mupdf.Document.openDocument(raw,'application/pdf');
+  const N=doc.countPages();const pages=[];
+  for(let i=0;i<N;i++){
+    const page=doc.loadPage(i);
+    let j;
+    try{j=JSON.parse(page.toStructuredText().asJSON());}catch(e){j={blocks:[]};}
+    const items=[];
+    for(const b of j.blocks||[])for(const l of b.lines||[]){
+      const s=(l.text||'').trim();if(!s)continue;
+      items.push({str:s,x:l.bbox.x,y:l.bbox.y,fs:Math.min(16,Math.max(6,l.bbox.h||10))});
+    }
+    pages.push({num:i+1,items,h:0,w:0});
+  }
+  return pages;
+}
+function showErr(m){prog.style.display='none';dropInner.style.display='block';
+  let e=document.querySelector('.err');
+  if(!e){e=document.createElement('div');e.className='err';drop.parentNode.insertBefore(e,drop.nextSibling);}
+  e.textContent=m;}
+function clearErr(){const e=document.querySelector('.err');if(e)e.remove();}
+
+/* ── 行構築（フォントサイズ適応のy許容差）── */
+function pageTol(p){
+  if(!p.items.length)return 4;
+  const fss=p.items.map(i=>i.fs).sort((a,b)=>a-b);
+  const med=fss[Math.floor(fss.length/2)];
+  return Math.min(7,Math.max(3,med*0.45));
+}
+function rowsOf(items,tol){
+  tol=tol||4;
+  const sorted=[...items].sort((a,b)=>a.y-b.y||a.x-b.x);
+  const rows=[];let cur=null;
+  for(const it of sorted){
+    if(!cur||Math.abs(it.y-cur.y)>tol){cur={y:it.y,cells:[it]};rows.push(cur);}
+    else cur.cells.push(it);
+  }
+  rows.forEach(r=>r.cells.sort((a,b)=>a.x-b.x));
+  return rows;
+}
+
+/* ═══ ページ分類 ═══ */
+const TANKA_TITLE=/単価表|代価表|施工単価|明細単価|当た?り内訳書|当た?り明細書|号内訳書|号明細書/;
+const BREAKDOWN_TITLE=/(?<!当た?り)(?<!号)内訳書|内訳表|工事費内訳|本工事費|見積書|御見積|明細書|内訳明細/;
+const REF_DOC=/参考資料|参考図書/;
+function pageText(p){return p.items.map(i=>i.str).join('');}
+function classify(pages){
+  const out={cover:[],breakdown:[],tanka:[],other:[]};
+  for(const p of pages){
+    const t=pageText(p);
+    const rows=rowsOf(p.items,pageTol(p));
+    const hasHeader=scanHeaders(rows).headers.length>0;
+    if(TANKA_TITLE.test(t)&&!BREAKDOWN_TITLE.test(t.slice(0,80))){out.tanka.push(p);p._type='単価表';}
+    else if(REF_DOC.test(t)&&!BREAKDOWN_TITLE.test(t)){out.other.push(p);p._type='参考資料';}
+    else if(BREAKDOWN_TITLE.test(t)||hasHeader){out.breakdown.push(p);p._type='内訳書';}
+    else if(/工事名|工事名称/.test(t)&&/工事内容|工事概要|発注|工期|施工場所/.test(t)){out.cover.push(p);p._type='表紙';}
+    else {out.other.push(p);p._type='その他';}
+  }
+  return out;
+}
+
+/* ═══ 表紙（鏡）解析 ═══ */
+const COVER_LABELS=[
+  ['工事名',/^工事名(称)?$/],['工事地名',/^(工事地名|施工場所|工事場所|施工地)$/],
+  ['発注者',/^発注者$/],['受注者',/^受注者$/],['事務所',/事務所名/],
+];
+function parseCover(pages,M){
+  for(const p of pages){
+    const rows=rowsOf(p.items,pageTol(p));
+    for(const r of rows){
+      const cs=r.cells;
+      for(let i=0;i<cs.length;i++){
+        const key=stripSp(z2h(cs[i].str));
+        for(const [field,re] of COVER_LABELS){
+          if(re.test(key)&&!M.summary[field]&&cs[i+1]){
+            let v='';
+            for(let k=i+1;k<cs.length;k++){
+              const t=stripSp(z2h(cs[k].str));
+              if(COVER_LABELS.some(([,rr])=>rr.test(t)))break;
+              if(/^[0-9０-９]{1,2}[）)]/.test(t))break;
+              v+=cs[k].str.trim()+' ';
+            }
+            v=v.trim();if(v)M.summary[field]=v;
+          }
+        }
+      }
+    }
+    M.summary._raw=(M.summary._raw||'')+pageText(p);
+  }
+  const ft=M.summary._raw||'';
+  const pick=re=>{const m=ft.match(re);return m?m[1].trim():'';};
+  if(!M.summary['工期'])M.summary['工期']=pick(/工\s*期\s*([0-9０-９,，]+日間)/);
+  if(!M.summary['主工種'])M.summary['主工種']=pick(/主\s*工\s*種\s*([^\s0-9０-９１-９]{2,12}工事)/);
+}
+
+/* ═══ 内訳書解析（汎用）═══ */
+const SECTION_RE=/^(.{0,14}?)(数量調書|数量計算書|数量総括表|単位数量計算書|調書|総括表)$/;
+function parseBreakdown(pages,M,DIAG){
+  let layout=null;
+  let section='';
+  const rawItems=[];
+  const layouts=new Map();
+  DIAG.sections=[];
+  for(const p of pages){
+    const tol=pageTol(p);
+    const rows=rowsOf(p.items,tol);
+    const {headers,consumed}=scanHeaders(rows);
+    const headerIdx=new Map(headers.map(h=>[h.idx,h]));
+    const firstHdr=headers.length?headers[0].idx:rows.length;
+    let pageSection=null;
+    for(let i=0;i<rows.length;i++){
+      const r=rows[i];
+      // ヘッダ前領域: セクションタイトル検出（土工数量調書 等）
+      if(i<firstHdr&&pageSection===null){
+        const j=stripSp(z2h(r.cells.map(c=>c.str).join('')));
+        const m=j.match(SECTION_RE);
+        if(m&&j.length<=20){
+          pageSection=m[1]||m[0];
+          if(section!==pageSection){section=pageSection;
+            if(!DIAG.sections.includes(section))DIAG.sections.push(section);}
+        }
+      }
+      if(headerIdx.has(i)){layout=makeLayout(headerIdx.get(i).anchors);layouts.set(layout.key,layout);continue;}
+      if(consumed.has(i))continue;
+      if(!layout)continue;
+      if(isNoiseRow(r))continue;
+      const f=rowToFields(r,layout);
+      // 行番号プレフィックス（"1 工事価格" 等）を除去
+      f.name=f.name.replace(/^[0-9０-９]{1,4}\s+(?=\D)/,'');
+      f.nameParts=f.nameParts.filter(p=>!/^[0-9０-９]{1,4}$/.test(stripSp(p.s)));
+      if(f.name){
+        rawItems.push({f,layout,page:p.num,section});
+      }else if(f.spec||f.unit||f.qty||f.price||f.amount||f.ref||f.note){
+        const last=rawItems[rawItems.length-1];
+        if(last&&last.layout.key===layout.key)mergeFields(last.f,f);
+      }
+    }
+  }
+  if(!layouts.size){
+    const fb=fallbackLayout(pages);
+    if(fb){
+      DIAG.warnings.push('表頭行が検出できず、数値分布からレイアウトを推定しました');
+      layouts.set(fb.key,fb);
+      for(const p of pages){
+        const rows=rowsOf(p.items,pageTol(p));
+        for(const r of rows){
+          if(isNoiseRow(r))continue;
+          const f=rowToFields(r,fb);
+          if(f.name)rawItems.push({f,layout:fb,page:p.num,section:''});
+          else if(f.amount||f.qty){const last=rawItems[rawItems.length-1];if(last)mergeFields(last.f,f);}
+        }
+      }
+    }
+  }
+  DIAG.layouts=[...layouts.values()];
+  M.tree=buildTree(rawItems,DIAG);
+  mergeFragments(M.tree);
+}
+const NOISE_RE=/^(設計)?内訳書$|^内訳表$|^明細書$|^見積書$|国土交通省|地方整備局|県土整備|^\(当\s*初\)|^\(第?\s*\d+\s*回変更\)/;
+function isNoiseRow(r){
+  const j=stripSp(z2h(r.cells.map(c=>c.str).join('')));
+  if(!j)return true;
+  if(/^[-－ー\d\s.]+$/.test(j))return true;             // ページ番号 "- 1 -"
+  if(NOISE_RE.test(j))return true;
+  if(/^(工事名|事業名|施工場所|工事番号|工期|発注者|受注者)/.test(j))return true;
+  if(/[（(]\d+\/\d+[)）]$/.test(j))return true;          // ページネーション "(1/2)"
+  if(/^[A-Za-z]{1,4}\d{3,}$/.test(j))return true;       // 帳票コード "SK68013"
+  if(/^(事業区分|工事区分)[^・]/.test(j)&&j.length<24)return true;
+  return false;
+}
+function rowToFields(row,layout){
+  const f={name:'',nameX:null,nameParts:[],spec:'',unit:'',qty:'',price:'',amount:'',note:'',ref:''};
+  for(const c of row.cells){
+    const s=c.str.trim();if(!s)continue;
+    const ref=findRef(s);
+    const a=layout.colOf(c.x);
+    if(ref&&!f.ref&&(a.family==='note'||a.family==='other'||a.family==='name'&&/号/.test(s)&&s.length<=10)){
+      f.ref=ref;
+      if(a.family!=='name')continue;
+    }
+    switch(a.family){
+      case 'name':
+        if(f.nameX===null)f.nameX=c.x;
+        f.name+=(f.name?' ':'')+s;
+        f.nameParts.push({x:c.x,s});
+        break;
+      case 'spec': f.spec+=s+' ';break;
+      case 'unit':
+        if(isUnitToken(s))f.unit+=s;
+        else f.note+=s+' ';
+        break;
+      case 'qty': f.qty+=s;break;
+      case 'price': f.price+=s;break;
+      case 'amount': f.amount+=s;break;
+      case 'note': f.note+=s+' ';break;
+      case 'calc': f.note+=s+' ';break;
+      default: f.spec+=s+' ';
+    }
+  }
+  // 数値検証: 数値列に落ちた非数値は規格へ戻す
+  for(const k of ['qty','price','amount']){
+    if(f[k]&&!isNumeric(f[k])){
+      if(famUnitLike(f[k])&&!f.unit){f.unit=f[k];}
+      else f.spec+=f[k]+' ';
+      f[k]='';
+    }
+  }
+  f.spec=f.spec.trim();f.note=f.note.trim();f.name=f.name.trim();
+  if(!f.ref){const r2=findRef(f.note);if(r2)f.ref=r2;}
+  return f;
+}
+const famUnitLike=s=>/^(式|m|m2|m3|ｍ|ｍ２|ｍ３|km|t|kg|本|枚|個|箇所|基|台|組|回|日|人日|空m3|m\^2|m\^3|ha|L|缶|袋|束|面|孔|口|体|条|径間|ヶ所|ヵ所|か所|人|時間|h)$/.test(stripSp(z2h(s)));
+/* 単位列の妥当性: 既知単位 or 3文字以下の非数値（＝や計算結果を排除） */
+const isUnitToken=s=>{
+  const t=stripSp(z2h(s));
+  return famUnitLike(t)||(t.length>0&&t.length<=3&&!/[0-9=＝≒.,]/.test(t));
+};
+function mergeFields(dst,src){
+  if(src.spec)dst.spec=(dst.spec+' '+src.spec).trim();
+  if(src.name)dst.name=(dst.name+' '+src.name).trim(); // 名称列の折返しは名称の続きとして連結
+  for(const k of ['unit','qty','price','amount','ref'])if(!dst[k]&&src[k])dst[k]=src[k];
+  if(src.note)dst.note=(dst.note+' '+src.note).trim();
+}
+
+/* ── 階層化: 分列式 / インデント式 / ドット接頭式 を自動判別。
+   セクション（土工数量調書 等のシートタイトル）があれば最上位層に。 ── */
+function buildTree(rawItems,DIAG){
+  const root={children:[]};
+  if(!rawItems.length)return root.children;
+  const secList=[...new Set(rawItems.map(it=>it.section||''))].filter(Boolean);
+  const useSections=secList.length>=2;
+  DIAG.useSections=useSections;
+  // レイアウトごとの統計: ドット接頭比率・インデントx
+  const indentMap=new Map(),dotStat=new Map();
+  for(const it of rawItems){
+    if(it.layout.columnMode)continue;
+    const k=it.layout.key;
+    if(!dotStat.has(k))dotStat.set(k,{dot:0,total:0});
+    const st=dotStat.get(k);st.total++;
+    if(/^[・･]/.test(stripSp(it.f.name)))st.dot++;
+    if(!indentMap.has(k))indentMap.set(k,[]);
+    if(it.f.nameX!==null)indentMap.get(k).push(Math.round(it.f.nameX));
+  }
+  const dotMode=new Map();
+  for(const [k,st] of dotStat)dotMode.set(k,st.total>=3&&st.dot/st.total>=0.25);
+  DIAG.dotMode=[...dotMode.values()].some(v=>v);
+  const centersOf=new Map();
+  for(const [k,xs] of indentMap){
+    const u=[...new Set(xs)].sort((a,b)=>a-b);
+    const freq={};xs.forEach(x=>freq[x]=(freq[x]||0)+1);
+    const groups=[];let g=[u[0]];
+    for(let i=1;i<u.length;i++){
+      if(u[i]-u[i-1]<=5)g.push(u[i]);else{groups.push(g);g=[u[i]];}
+    }
+    groups.push(g);
+    const total=xs.length;
+    const scored=groups.map(gr=>({center:gr.reduce((s,x)=>s+x,0)/gr.length,
+      count:gr.reduce((s,x)=>s+freq[x],0)}));
+    let valid=scored.filter(s=>s.count>=2||s.count/total>=0.01);
+    if(!valid.length)valid=scored;
+    centersOf.set(k,valid.map(s=>s.center).slice(0,6));
+  }
+  DIAG.levelCenters=centersOf;
+  const levelOf=(it)=>{
+    const k=it.layout.key;
+    if(dotMode.get(k)){
+      const m=stripSp(it.f.name).match(/^[・･]+/);
+      return Math.min((m?m[0].length:0)+1,8);
+    }
+    const cs=centersOf.get(k)||[0];
+    const x=it.f.nameX??cs[0];
+    let best=0,bd=1e9;cs.forEach((c,i)=>{const d=Math.abs(x-c);if(d<bd){bd=d;best=i;}});
+    return best+1;
+  };
+  const base=useSections?1:0;
+  let stack=[{node:root,level:0}];
+  let colPath=[],curSection=null,curLayoutKey=null;
+  for(const it of rawItems){
+    if(useSections&&it.section!==curSection){
+      curSection=it.section;
+      const secNode=mkNode(curSection||'（その他）',1,it.page);
+      root.children.push(secNode);
+      stack=[{node:root,level:0},{node:secNode,level:1}];
+      colPath=[];curLayoutKey=it.layout.key;
+    }
+    if(it.layout.key!==curLayoutKey){
+      curLayoutKey=it.layout.key;
+      stack=stack.slice(0,useSections?2:1);colPath=[];
+    }
+    const f=it.f;
+    if(it.layout.columnMode){
+      const parts=f.nameParts.map(p=>({lvl:it.layout.nameLevelOf(p.x)+base,s:p.s}))
+        .sort((a,b)=>a.lvl-b.lvl);
+      if(!parts.length)continue;
+      let deep=null;
+      for(const pt of parts){
+        if(colPath[pt.lvl]===pt.s&&stackAt(stack,pt.lvl)){deep=stackAt(stack,pt.lvl).node;continue;}
+        while(stack.length&&stack[stack.length-1].level>=pt.lvl)stack.pop();
+        colPath.length=pt.lvl;colPath[pt.lvl]=pt.s;
+        const node=mkNode(pt.s,pt.lvl,it.page);
+        stack[stack.length-1].node.children.push(node);
+        stack.push({node,level:pt.lvl});deep=node;
+      }
+      Object.assign(deep,{spec:f.spec,unit:f.unit,qty:f.qty,price:f.price,money:f.amount,tanka:f.ref,note:f.note});
+    }else{
+      const lv=levelOf(it)+base;
+      const disp=dotMode.get(it.layout.key)?f.name.replace(/^[・･\s]+/,''):f.name;
+      const node=mkNode(disp,lv,it.page);
+      Object.assign(node,{spec:f.spec,unit:f.unit,qty:f.qty,price:f.price,money:f.amount,tanka:f.ref,note:f.note});
+      while(stack.length&&stack[stack.length-1].level>=lv)stack.pop();
+      (stack.length?stack[stack.length-1].node:root).children.push(node);
+      stack.push({node,level:lv});colPath.length=0;
+    }
+  }
+  return root.children;
+}
+const stackAt=(stack,lvl)=>stack.find(s=>s.level===lvl);
+const mkNode=(name,level,page)=>({name,level,page,spec:'',unit:'',qty:'',price:'',money:'',tanka:'',note:'',children:[]});
+
+/* ── 折返し断片の吸収（(N号)・A 等の続き行が兄弟になった場合）── */
+function mergeFragments(nodes){
+  for(const arr of allChildArrays(nodes)){
+    for(let i=arr.length-1;i>0;i--){
+      const cur=arr[i],prev=arr[i-1];
+      const frag=/^[（(].{0,10}[)）]$|^[A-Za-zＡ-Ｚａ-ｚ]{1,3}[･・]?[A-Za-zＡ-Ｚ]?$/.test(stripSp(cur.name));
+      const prevEmpty=!prev.money&&(!prev.children||!prev.children.length);
+      if(frag&&prevEmpty&&(cur.money||cur.qty||cur.children.length)){
+        prev.name=prev.name+cur.name;
+        prev.spec=(prev.spec+' '+cur.spec).trim();
+        for(const k of ['qty','unit','price','money','tanka','note'])if(!prev[k]&&cur[k])prev[k]=cur[k];
+        if(cur.children.length)prev.children=cur.children;
+        arr.splice(i,1);
+      }
+    }
+  }
+}
+function allChildArrays(nodes,out=[]){out.push(nodes);for(const n of nodes)if(n.children&&n.children.length)allChildArrays(n.children,out);return out;}
+
+/* ═══ 単価表解析（汎用：表頭学習＋ブロック分割）═══ */
+function parseTanka(pages,M,DIAG){
+  let layout=null;
+  let cur=null; // ページをまたぐ単価表ブロックを途切れさせないため、ページ外で保持
+  const flush=()=>{if(cur)M.tanka[cur.key]=cur;cur=null;};
+  for(const p of pages){
+    const tol=pageTol(p);
+    const rows=rowsOf(p.items,tol);
+    let recent=[];
+    for(const r of rows){
+      const hd=detectHeader(r);
+      if(hd){layout=makeLayout(hd);continue;}
+      const cells=r.cells.map(c=>({x:c.x,s:c.str.trim()})).filter(c=>c.s);
+      if(!cells.length)continue;
+      const j=stripSp(z2h(cells.map(c=>c.s).join('')));
+      // ブロック開始: 左寄り（x<180）セル単体、または左側セル連結文字列に参照番号
+      let blockKey='';
+      const idCell=cells.find(c=>c.x<180&&findRef(c.s)&&stripSp(c.s).length<=12);
+      if(idCell)blockKey=findRef(idCell.s);
+      if(!blockKey){
+        const leftJoin=cells.filter(c=>c.x<180).map(c=>c.s).join('');
+        if(leftJoin&&stripSp(leftJoin).length<=14)blockKey=findRef(leftJoin);
+      }
+      if(blockKey){
+        flush();
+        const key=blockKey;
+        cur={key,title:'',unit:'',meta:[],lines:[],raw:'',_closed:false,_last:null};
+        // タイトル: 同行＋直前2行の左側テキスト
+        const titleParts=[];
+        for(const rr of [...recent.slice(-2),{cells:r.cells}]){
+          for(const c of rr.cells){
+            const s=c.str?c.str.trim():c.s;if(!s)continue;
+            const x=c.x;
+            if(x<420&&!findRef(s)&&!/^(単位|数量|単価|金額|名称|規格)$/.test(stripSp(z2h(s))))titleParts.push(s);
+          }
+        }
+        cur.title=titleParts.join(' ').replace(/\s+/g,' ').trim().slice(0,60);
+        // 単位: 「単位」ラベル直後のセル
+        const ui=cells.findIndex(c=>stripSp(c.s)==='単位');
+        if(ui>=0&&cells[ui+1])cur.unit=cells[ui+1].s;
+        recent.push(r);if(recent.length>4)recent.shift();
+        continue;
+      }
+      recent.push(r);if(recent.length>4)recent.shift();
+      if(!cur)continue;
+      cur.raw+=cells.map(c=>c.s).join('  ')+'\n';
+      if(/単価使用年月|歩掛使用年月|労務調整係数/.test(j)){cur.meta.push(cells.map(c=>c.s).join(' '));continue;}
+      if(/^(計|合計|単価)$|円[／/]/.test(j)){cur._closed=true;continue;}
+      if(/^[-－ー\d\s.]+$/.test(j)||/国土交通省|地方整備局/.test(j))continue;
+      if(cur._closed)continue;
+      if(!layout)continue;
+      const f=rowToFields({cells:r.cells},layout);
+      if(f.name){
+        const line={nm:f.name,sp:f.spec,u:f.unit,q:f.qty,pr:f.price,mo:f.amount,note:f.note,ref:f.ref};
+        cur.lines.push(line);cur._last=line;
+      }else if(cur._last&&(f.unit||f.qty||f.price||f.amount||f.spec)){
+        const L=cur._last;
+        if(f.spec)L.sp=(L.sp+' '+f.spec).trim();
+        if(!L.u&&f.unit)L.u=f.unit;if(!L.q&&f.qty)L.q=f.qty;
+        if(!L.pr&&f.price)L.pr=f.price;if(!L.mo&&f.amount)L.mo=f.amount;
+        if(!L.ref&&f.ref)L.ref=f.ref;
+      }
+    }
+  }
+  flush();
+}
+
+/* ═══ モデル構築 ═══ */
+let MODEL={summary:{},tree:[],tanka:{}};
+let DIAG={pages:{},layouts:[],levelCenters:new Map(),warnings:[]};
+function buildModel(pages){
+  MODEL={summary:{},tree:[],tanka:{}};
+  DIAG={pages:{},layouts:[],levelCenters:new Map(),warnings:[],engine:ENGINE,sections:[]};
+  if(ENGINE!=='PDF.js')DIAG.warnings.push('主エンジンでテキスト抽出できず、MuPDF(WASM)で代替抽出しました');
+  const cls=classify(pages);
+  DIAG.pages={表紙:cls.cover.length,内訳書:cls.breakdown.length,単価表:cls.tanka.length,その他:cls.other.length};
+  parseCover(cls.cover,MODEL);
+  parseBreakdown(cls.breakdown,MODEL,DIAG);
+  parseTanka(cls.tanka,MODEL,DIAG);
+  // 参照整合チェック
+  const flatItems=flatten(MODEL.tree);
+  const missing=flatItems.filter(n=>n.tanka&&!MODEL.tanka[n.tanka]).length;
+  if(missing)DIAG.warnings.push(`単価表参照のうち ${missing} 件が本文中に見つかりません`);
+  if(!flatItems.length&&Object.keys(MODEL.tanka).length)
+    DIAG.warnings.push('内訳書が見つからないため、単価表一覧のみ表示します');
+  if(!flatItems.length&&!Object.keys(MODEL.tanka).length)
+    DIAG.warnings.push('構造化できる表が見つかりませんでした。原文表示に切替えます');
+  render(pages);
+}
+
+/* ═══ レンダリング ═══ */
+let CUR_LEVEL=99,ROWREF=[],MAXLV=1,LEVEL_LABELS=[];
+function flatten(nodes,arr=[]){for(const n of nodes){arr.push(n);if(n.children)flatten(n.children,arr);}return arr;}
+function render(pages){
+  prog.style.display='none';drop.style.display='none';app.style.display='flex';
+  const flat=flatten(MODEL.tree);
+  MAXLV=flat.reduce((m,n)=>Math.max(m,n.level||1),1);
+  // レベルラベル: 分列式ならヘッダ名を流用
+  LEVEL_LABELS=[];
+  const colLayout=DIAG.layouts.find(l=>l.columnMode);
+  if(colLayout){colLayout.nameAnchors.forEach(a=>LEVEL_LABELS.push(a.label));}
+  for(let i=LEVEL_LABELS.length;i<MAXLV;i++)LEVEL_LABELS.push('L'+(i+1));
+  renderSummary();
+  renderDiag();
+  const holder=document.getElementById('mainHolder');
+  if(flat.length){
+    holder.innerHTML=`<div class="tablewrap"><table class="tree">
+      <thead id="treeHead"></thead>
+      <tbody id="treeBody"></tbody></table></div>`;
+    renderTree();
+  }else if(Object.keys(MODEL.tanka).length){
+    let h='<div class="tablewrap"><table class="tree"><thead><tr><th>番号</th><th>名称</th><th>単位</th></tr></thead><tbody>';
+    for(const [k,d] of Object.entries(MODEL.tanka))
+      h+=`<tr><td class="cell"><span class="tanka-link" data-tanka="${esc(k)}">${esc(k)}</span></td><td class="cell">${esc(d.title)}</td><td class="cell">${esc(d.unit)}</td></tr>`;
+    h+='</tbody></table></div>';
+    holder.innerHTML=h;
+    holder.querySelectorAll('[data-tanka]').forEach(el=>el.onclick=()=>openTanka(el.dataset.tanka));
+  }else{
+    let h='';
+    for(const p of pages.slice(0,20))
+      h+=`<div class="rawpage"><h4>p.${p.num}（${p._type||''}）</h4><pre>${esc(rowsOf(p.items,pageTol(p)).map(r=>r.cells.map(c=>c.str).join('  ')).join('\n').slice(0,2500))}</pre></div>`;
+    holder.innerHTML=h;
+  }
+  bindToolbar();
+  const s=MODEL.summary;
+  document.getElementById('hdrMeta').innerHTML=
+    (s['工事名']?`<span><b>${esc(trunc(s['工事名'],28))}</b></span>`:'')+
+    `<span>項目 <b>${flat.length}</b></span><span>単価表 <b>${Object.keys(MODEL.tanka).length}</b></span>`;
+}
+function renderSummary(){
+  const s=MODEL.summary;const holder=document.getElementById('summaryHolder');
+  const fields=['工事名','工事地名','発注者','受注者','事務所','工期','主工種'];
+  let rows='';
+  for(const k of fields)if(s[k])rows+=`<div class="row"><span class="k">${k}</span><span class="v">${esc(s[k])}</span></div>`;
+  holder.innerHTML=rows?`<div class="summary"><h3>工事概要 ／ PROJECT OVERVIEW</h3><div class="grid">${rows}</div></div>`:'';
+}
+function renderDiag(){
+  const d=document.getElementById('diagPanel');
+  let h='<h4>抽出エンジン</h4><div class="kv">'+esc(DIAG.engine||'PDF.js')+'</div><h4>ページ分類</h4><div class="kv">'+
+    Object.entries(DIAG.pages).map(([k,v])=>`${k}: ${v}p`).join(' ／ ')+'</div>';
+  if(DIAG.layouts.length){
+    h+='<h4>検出レイアウト（列アンカー）</h4>';
+    for(const L of DIAG.layouts.slice(0,3)){
+      h+='<div>'+L.anchors.map(a=>`<span class="colchip">${esc(a.label)} @${Math.round(a.x)}</span>`).join('')+
+        (L.columnMode?' <b style="font-size:11px;color:var(--accent-deep)">分列式階層</b>':'')+'</div>';
+    }
+  }
+  if(DIAG.levelCenters.size){
+    h+='<h4>インデント階層（クラスタ中心 x）</h4><div class="kv">';
+    for(const [,cs] of DIAG.levelCenters)h+=cs.map((c,i)=>`L${i+1}≈${Math.round(c)}`).join('  ')+'<br>';
+    h+='</div>';
+  }
+  if(DIAG.sections&&DIAG.sections.length)h+='<h4>セクション</h4><div class="kv">'+DIAG.sections.map(esc).join(' ／ ')+'</div>';
+  if(DIAG.warnings.length)
+    h+='<h4>警告</h4><div class="kv warn">'+DIAG.warnings.map(esc).join('<br>')+'</div>';
+  d.innerHTML=h;
+}
+let TREECOLS={};
+function renderTree(){
+  const flat=flatten(MODEL.tree);
+  TREECOLS={
+    spec:flat.some(n=>n.spec),qty:flat.some(n=>n.qty),unit:flat.some(n=>n.unit),
+    price:flat.some(n=>n.price),money:flat.some(n=>n.money),
+    note:flat.some(n=>n.note),ref:flat.some(n=>n.tanka)
+  };
+  const C=TREECOLS;
+  let th='<tr><th style="min-width:240px">名称（階層）</th>';
+  if(C.spec)th+='<th>規格</th>';
+  if(C.qty)th+='<th class="num">数量</th>';
+  if(C.unit)th+='<th>単位</th>';
+  if(C.price)th+='<th class="num">単価</th>';
+  if(C.money)th+='<th class="num">金額</th>';
+  if(C.note)th+='<th>計算式・摘要</th>';
+  if(C.ref)th+='<th>単価表</th>';
+  document.getElementById('treeHead').innerHTML=th+'</tr>';
+  const tb=document.getElementById('treeBody');tb.innerHTML='';ROWREF=[];
+  const colors=['var(--c1)','var(--c2)','var(--c3)','var(--c4)','var(--c5)','var(--c6)'];
+  const walk=(nodes,depth,ancestors)=>{
+    for(const n of nodes){
+      const hasKids=n.children&&n.children.length;
+      const tr=document.createElement('tr');
+      tr.className='lv'+Math.min(n.level,4);
+      const indent=depth*18;
+      const lbl=LEVEL_LABELS[n.level-1]||('L'+n.level);
+      let cells=
+        `<td><div class="namecell" style="padding-left:${10+indent}px">
+            <span class="toggle ${hasKids?'':'leaf'}" data-tog>${hasKids?'−':''}</span>
+            <span class="lvltag" style="background:${colors[(n.level-1)%6]}">${esc(lbl.slice(0,2))}</span>
+            <span class="nm">${esc(n.name)}</span></div></td>`;
+      if(C.spec)cells+=`<td class="cell spec">${esc(n.spec)}</td>`;
+      if(C.qty)cells+=`<td class="cell num">${esc(n.qty)}</td>`;
+      if(C.unit)cells+=`<td class="cell">${esc(n.unit)}</td>`;
+      if(C.price)cells+=`<td class="cell num">${esc(n.price)}</td>`;
+      if(C.money)cells+=`<td class="cell money">${esc(n.money)}</td>`;
+      if(C.note)cells+=`<td class="cell note">${esc(trunc(n.note,60))}</td>`;
+      if(C.ref)cells+=`<td class="cell">${n.tanka?`<span class="tanka-link ${MODEL.tanka[n.tanka]?'':'dead'}" data-tanka="${esc(n.tanka)}">${esc(n.tanka)}</span>`:''}</td>`;
+      tr.innerHTML=cells;
+      tb.appendChild(tr);
+      const ref={node:n,tr,level:n.level,depth,ancestors:[...ancestors]};ROWREF.push(ref);
+      if(hasKids){
+        tr.querySelector('[data-tog]').onclick=()=>toggleNode(ref);
+        walk(n.children,depth+1,[...ancestors,ref]);
+      }
+    }
+  };
+  walk(MODEL.tree,0,[]);
+  tb.querySelectorAll('[data-tanka]:not(.dead)').forEach(el=>el.onclick=()=>openTanka(el.dataset.tanka));
+  applyLevel(MAXLV);
+}
+function toggleNode(ref){
+  ref.collapsed=!ref.collapsed;
+  ref.tr.querySelector('[data-tog]').textContent=ref.collapsed?'+':'−';
+  recompute();
+}
+function recompute(){
+  for(const r of ROWREF){
+    const hidden=r.ancestors.some(a=>a.collapsed);
+    r.tr.classList.toggle('hidden',hidden||r._searchHidden);
+  }
+  updateStat();
+}
+function applyLevel(lv){
+  CUR_LEVEL=lv;
+  for(const r of ROWREF){
+    r.collapsed=(r.node.children&&r.node.children.length&&r.level>=lv);
+    const t=r.tr.querySelector('[data-tog]');
+    if(t&&!t.classList.contains('leaf'))t.textContent=r.collapsed?'+':'−';
+  }
+  document.querySelectorAll('#lvlBtns button').forEach(b=>b.classList.toggle('on',+b.dataset.lv===lv));
+  recompute();
+}
+function updateStat(){
+  const vis=ROWREF.filter(r=>!r.tr.classList.contains('hidden')).length;
+  document.getElementById('stat').textContent=ROWREF.length?`表示 ${vis} / 全 ${ROWREF.length} 項目`:'';
+}
+function bindToolbar(){
+  const lb=document.getElementById('lvlBtns');lb.innerHTML='';
+  for(let i=1;i<=MAXLV;i++){
+    const b=document.createElement('button');
+    b.dataset.lv=i;b.textContent=trunc(LEVEL_LABELS[i-1]||('L'+i),4);
+    b.onclick=()=>applyLevel(i);lb.appendChild(b);
+  }
+  document.getElementById('expandAll').onclick=()=>{ROWREF.forEach(r=>{r.collapsed=false;
+    const t=r.tr.querySelector('[data-tog]');if(t&&!t.classList.contains('leaf'))t.textContent='−';});recompute();};
+  document.getElementById('collapseAll').onclick=()=>applyLevel(1);
+  document.getElementById('diagBtn').onclick=()=>document.getElementById('diagPanel').classList.toggle('show');
+  const sb=document.getElementById('search');
+  sb.oninput=()=>{const q=sb.value.trim().toLowerCase();
+    if(!q){ROWREF.forEach(r=>r._searchHidden=false);applyLevel(CUR_LEVEL);return;}
+    const matchSet=new Set();
+    for(const r of ROWREF){
+      const hay=(r.node.name+r.node.spec+r.node.tanka+r.node.note).toLowerCase();
+      if(hay.includes(q)){matchSet.add(r);r.ancestors.forEach(a=>matchSet.add(a));}
+    }
+    ROWREF.forEach(r=>{r._searchHidden=!matchSet.has(r);r.collapsed=false;});
+    recompute();
+  };
+}
+
+/* ── 単価表モーダル ── */
+const modal=document.getElementById('modal');
+document.getElementById('mClose').onclick=()=>modal.classList.remove('show');
+modal.onclick=e=>{if(e.target===modal)modal.classList.remove('show');};
+document.addEventListener('keydown',e=>{if(e.key==='Escape')modal.classList.remove('show');});
+function openTanka(key){
+  const d=MODEL.tanka[key];
+  document.getElementById('mTag').textContent=key;
+  if(!d){
+    document.getElementById('mTitle').textContent='（単価表データが見つかりません）';
+    document.getElementById('mBody').innerHTML='<p style="color:var(--ink-soft);font-size:13px">この単価表はPDF内で抽出できませんでした。</p>';
+    modal.classList.add('show');return;
+  }
+  document.getElementById('mTitle').textContent=trunc(d.title||'',44)+(d.unit?`（単位: ${d.unit}）`:'');
+  let html='';
+  if(d.meta.length)html+=`<div class="tkmeta">${d.meta.map(esc).join('<br>')}</div>`;
+  if(d.lines.length){
+    html+='<table class="tk"><thead><tr><th>名称</th><th>規格</th><th class="num">数量</th><th>単位</th><th class="num">単価</th><th class="num">金額</th><th>摘要</th></tr></thead><tbody>';
+    for(const L of d.lines){
+      const noteHtml=L.ref&&MODEL.tanka[L.ref]
+        ?esc(L.note||'')+` <span class="tanka-link" data-tanka="${esc(L.ref)}">${esc(L.ref)}</span>`
+        :esc(L.note||L.ref||'');
+      html+=`<tr><td>${esc(L.nm)}</td><td>${esc(L.sp)}</td><td class="num">${esc(L.q)}</td><td>${esc(L.u)}</td><td class="num">${esc(L.pr)}</td><td class="num">${esc(L.mo)}</td><td>${noteHtml}</td></tr>`;
+    }
+    html+='</tbody></table>';
+  }else{
+    html+='<p style="color:var(--ink-soft);font-size:12px">構造化できる明細行がありませんでした。原文をご確認ください。</p>';
+  }
+  html+=`<details style="margin-top:12px"><summary style="cursor:pointer;font-size:11px;color:var(--ink-soft);font-family:var(--mono)">生テキスト（PDF原文）</summary><div class="raw">${esc(d.raw)}</div></details>`;
+  document.getElementById('mBody').innerHTML=html;
+  document.getElementById('mBody').querySelectorAll('[data-tanka]').forEach(el=>el.onclick=()=>openTanka(el.dataset.tanka));
+  modal.classList.add('show');
+}
+
+/* utils */
+function esc(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function trunc(s,n){s=s||'';return s.length>n?s.slice(0,n)+'…':s;}
+</script>
+</body>
+</html>
