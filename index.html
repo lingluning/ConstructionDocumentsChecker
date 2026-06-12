@@ -177,6 +177,13 @@
   .modal .pbody .actions button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
   .modal .pbody .actions button.primary:hover{background:var(--accent-deep)}
   .modal .pbody .chk{font-size:12px;display:flex;align-items:center;gap:6px;margin-top:8px}
+  .aggchips{display:inline-flex;gap:0;border:1px solid var(--rule);border-radius:3px;
+    overflow:hidden;margin-bottom:10px}
+  .aggchips button{font-family:var(--jp);font-size:11.5px;border:none;border-right:1px solid var(--rule);
+    background:#fff;padding:4px 14px;cursor:pointer;color:var(--ink)}
+  .aggchips button:last-child{border-right:none}
+  .aggchips button:hover{color:var(--accent-deep)}
+  .aggchips button.on{background:var(--accent);color:#fff}
   .aipanel{margin:8px 22px;border:1px solid var(--accent);border-left:4px solid var(--accent);
     background:#fff;border-radius:4px;display:none}
   .aipanel.show{display:block}
@@ -1366,6 +1373,7 @@ const CAT_RULES=[
   ['労務',/(作業員|世話役|とび工|型枠工|鉄筋工|溶接工|防水工|ブロック工|電工|配管工|塗装工|左官|大工|石工|潜水士|潜かん工|さく岩工|運転手|交通誘導|警備員|オペレータ|技師|技術員|測量|設計技術者)/],
   ['機械',/(バックホ|ブルドーザ|クレーン|ダンプ|ローラ|フィニッシャ|ポンプ車|プラント|発電機|コンプレッサ|グレーダ|杭打|削岩|攪拌|圧入|バイブロ|クローラ|トラクタ|フォークリフト|高所作業車|散水車|タンク車|ウインチ|ホイスト|モンケン|アジテータ|ミキサ|機械損料|損料|賃料|運転経費|機械経費|軽油|ガソリン|重油|灯油|電力に関する料金)/],
   ['経費等',/(諸雑費|雑費|雑材料|雑品|消費税|値引|割増|間接費|共通仮設|現場管理|一般管理|経費|歩掛|補正|端数処理)/],
+  ['試験・調査',/(試験|試料|測定|調査|分析|検査|計測|観測|ボーリング|サウンディング|モニタリング|供試体)/],
   ['施工',/(運搬|掘削|盛土|締固|敷均|設置|据付|組立|撤去|取壊|解体|床掘|埋戻|養生|切断|削孔|注入|打設|吹付|転圧|整地|清掃|処分|積込)/],
 ];
 function catOf(name,unit){
@@ -1374,75 +1382,105 @@ function catOf(name,unit){
   if(!n)return 'その他';
   if(/^(人|人日)$/.test(u))return '労務';
   if(/^(供用日|運転日|h|時間)$/.test(u))return '機械';
+  if(/^(試料|供試体|孔)$/.test(u))return '試験・調査';
   for(const [c,re] of CAT_RULES)if(re.test(n))return c;
   if(/工$/.test(n))return '施工';   // 「〜工」は作業項目（労務職種名は上の辞書で判定済み）
   if(!u||u==='式')return 'その他';  // 複合項目・経費類は材料に数えない
   return '材料';
 }
-/* 内訳書の末端行＋単価表明細を 名称×規格×単位 で集約（数量を合算、金額は扱わない） */
+/* 内訳書の末端行＋単価表明細を 名称×規格×単位 で集約（数量を合算、金額は扱わない）。
+   各項目に所属工種（内訳書の上位階層／単価表は参照元ノードの上位階層）を付与する。 */
 function aggregateItems(){
   const map=new Map();
-  const add=(nm,sp,u,q,src)=>{
+  const add=(nm,sp,u,q,src,koshu,isWork)=>{
     nm=(nm||'').trim();if(!nm)return;
     sp=(sp||'').trim();u=(u||'').trim();
     const key=nm+'|'+sp+'|'+u;
-    if(!map.has(key))map.set(key,{name:nm,spec:sp,unit:u,qty:0,qtyOk:true,count:0,srcs:new Set(),cat:catOf(nm,u)});
+    // 単価表を参照する行は複合的な施工項目（材料ではない）
+    if(!map.has(key))map.set(key,{name:nm,spec:sp,unit:u,qty:0,qtyOk:true,count:0,srcs:new Set(),koshu:new Set(),cat:isWork?'施工':catOf(nm,u)});
     const e=map.get(key);
     e.count++;e.srcs.add(src);
+    if(koshu)e.koshu.add(koshu);
     const t=parseFloat(stripSp(z2h(q||'')).replace(/,/g,''));
     if(isFinite(t))e.qty+=t;
     else if((q||'').trim())e.qtyOk=false;
   };
-  const walk=ns=>{for(const n of ns){
-    if(n.children&&n.children.length)walk(n.children);
-    else add(n.name,n.spec,n.unit,n.qty,'内訳書');
+  // 単価表番号 → 参照元ノードの工種パス
+  const refPath=new Map();
+  const walk=(ns,path)=>{for(const n of ns){
+    const p=path.length?path.join('＞'):n.name;
+    if(n.tanka){
+      if(!refPath.has(n.tanka))refPath.set(n.tanka,new Set());
+      refPath.get(n.tanka).add(p);
+    }
+    const newPath=path.length<2?[...path,n.name]:path; // 上位2階層（工種＞種別）まで記録
+    if(n.children&&n.children.length)walk(n.children,newPath);
+    else add(n.name,n.spec,n.unit,n.qty,'内訳書',path.join('＞'),!!n.tanka);
   }};
-  walk(MODEL.tree);
-  for(const [k,d] of Object.entries(MODEL.tanka))
-    for(const ln of d.lines)add(ln.nm,ln.sp,ln.u,ln.q,k);
+  walk(MODEL.tree,[]);
+  for(const [k,d] of Object.entries(MODEL.tanka)){
+    const kos=refPath.has(k)?[...refPath.get(k)].join('／'):'';
+    for(const ln of d.lines)add(ln.nm,ln.sp,ln.u,ln.q,k,kos);
+  }
   return [...map.values()];
 }
 const fmtQty=q=>{const r=Math.round(q*1000)/1000;return r.toLocaleString('ja-JP',{maximumFractionDigits:3});};
+const AGG_FILTERS=[
+  ['all','すべて',null],
+  ['concrete','コンクリート',it=>/(コンクリート|生コン|モルタル)/.test(it.name+it.spec)],
+];
 function showMaterialAgg(){
   if(!MODEL.tree.length&&!Object.keys(MODEL.tanka).length){
     alert('集計できるデータがありません。先にPDFまたはCSVを読み込んでください。');return;}
-  const all=aggregateItems();
-  const items=all.filter(it=>it.cat==='材料')
+  const mats=aggregateItems().filter(it=>it.cat==='材料')
     .sort((a,b)=>b.count-a.count||a.name.localeCompare(b.name,'ja'));
   document.getElementById('mTag').textContent='集計';
-  document.getElementById('mTitle').textContent=`材料集計（数量）─ ${items.length} 品目`;
-  let html=`<div class="tkmeta">内訳書の末端行と単価表明細を 名称×規格×単位 で集約し、
-労務・機械・経費等をルールで除外した一覧です（金額は集計していません）。<br>
+  const render=fkey=>{
+    const fdef=AGG_FILTERS.find(f=>f[0]===fkey)||AGG_FILTERS[0];
+    const current=fdef[2]?mats.filter(fdef[2]):mats;
+    document.getElementById('mTitle').textContent=`材料集計（数量）─ ${current.length} 品目`;
+    let html='<div class="aggchips">'+
+      AGG_FILTERS.map(f=>`<button data-f="${f[0]}" class="${f[0]===fdef[0]?'on':''}">${f[1]}</button>`).join('')+
+      '</div>';
+    html+=`<div class="tkmeta">内訳書の末端行と単価表明細を 名称×規格×単位 で集約し、
+労務・機械・経費等・試験・施工項目をルールで除外した一覧です（金額は集計していません）。<br>
 <b style="color:var(--accent-deep)">注意:</b> 単価表内の数量は「その表の単位当たり」の数量のため、
 合計数量は使用回数を乗じていない参考値です。</div>`;
-  if(items.length){
-    html+='<table class="tk"><thead><tr><th>名称</th><th>規格</th><th>単位</th><th class="num">合計数量</th><th class="num">件数</th><th>出典</th></tr></thead><tbody>';
-    for(const it of items){
-      const srcs=[...it.srcs];
-      const srcTxt=srcs.slice(0,3).join('、')+(srcs.length>3?` ほか${srcs.length-3}件`:'');
-      html+=`<tr><td>${esc(it.name)}</td><td>${esc(it.spec)}</td><td>${esc(it.unit)}</td>
-        <td class="num">${fmtQty(it.qty)}${it.qtyOk?'':' ※'}</td>
-        <td class="num">${it.count}</td><td>${esc(srcTxt)}</td></tr>`;
+    if(current.length){
+      html+='<table class="tk"><thead><tr><th>名称</th><th>規格</th><th>単位</th><th class="num">合計数量</th><th class="num">件数</th><th>所属工種</th><th>出典</th></tr></thead><tbody>';
+      for(const it of current){
+        const srcs=[...it.srcs];
+        const srcTxt=srcs.slice(0,3).join('、')+(srcs.length>3?` ほか${srcs.length-3}件`:'');
+        const kos=[...it.koshu].filter(Boolean);
+        const kosTxt=trunc(kos.slice(0,2).join('／')+(kos.length>2?` ほか${kos.length-2}`:''),40);
+        html+=`<tr><td>${esc(it.name)}</td><td>${esc(it.spec)}</td><td>${esc(it.unit)}</td>
+          <td class="num">${fmtQty(it.qty)}${it.qtyOk?'':' ※'}</td>
+          <td class="num">${it.count}</td><td>${esc(kosTxt)}</td><td>${esc(srcTxt)}</td></tr>`;
+      }
+      html+='</tbody></table>';
+      if(current.some(it=>!it.qtyOk))
+        html+='<div class="tkmeta" style="margin-top:8px">※ 数値化できない数量表記を含むため一部未加算</div>';
+      html+=`<div style="margin-top:12px"><button id="aggCsv" style="font-family:var(--jp);font-size:12px;
+        padding:5px 14px;border:1px solid var(--rule);border-radius:3px;background:#fff;cursor:pointer">CSV保存</button></div>`;
+    }else{
+      html+='<p style="color:var(--ink-soft);font-size:12px">該当する項目がありませんでした。</p>';
     }
-    html+='</tbody></table>';
-    if(items.some(it=>!it.qtyOk))
-      html+='<div class="tkmeta" style="margin-top:8px">※ 数値化できない数量表記を含むため一部未加算</div>';
-    html+=`<div style="margin-top:12px"><button id="aggCsv" style="font-family:var(--jp);font-size:12px;
-      padding:5px 14px;border:1px solid var(--rule);border-radius:3px;background:#fff;cursor:pointer">CSV保存</button></div>`;
-  }else{
-    html+='<p style="color:var(--ink-soft);font-size:12px">材料と判定できる項目がありませんでした。</p>';
-  }
-  document.getElementById('mBody').innerHTML=html;
-  const cb=document.getElementById('aggCsv');
-  if(cb)cb.onclick=()=>{
-    const rows=[['名称','規格','単位','合計数量','件数','出典']];
-    for(const it of items)rows.push([it.name,it.spec,it.unit,it.qty,it.count,[...it.srcs].join(' ')]);
-    const csv='\uFEFF'+rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\r\n');
-    const a=document.createElement('a');
-    a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-    a.download='材料集計_'+(MODEL.summary['工事名']||'設計書').slice(0,30)+'.csv';
-    a.click();URL.revokeObjectURL(a.href);
+    const body=document.getElementById('mBody');
+    body.innerHTML=html;
+    body.querySelectorAll('.aggchips button').forEach(b=>b.onclick=()=>render(b.dataset.f));
+    const cb=document.getElementById('aggCsv');
+    if(cb)cb.onclick=()=>{
+      const rows=[['名称','規格','単位','合計数量','件数','所属工種','出典']];
+      for(const it of current)rows.push([it.name,it.spec,it.unit,it.qty,it.count,
+        [...it.koshu].filter(Boolean).join('／'),[...it.srcs].join(' ')]);
+      const csv='\uFEFF'+rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+      a.download=(fdef[0]==='concrete'?'コンクリート集計_':'材料集計_')+(MODEL.summary['工事名']||'設計書').slice(0,30)+'.csv';
+      a.click();URL.revokeObjectURL(a.href);
+    };
   };
+  render('all');
   modal.classList.add('show');
 }
 function bindNav(){
