@@ -1478,13 +1478,26 @@ const CSV_BTN='<div style="margin-top:12px"><button id="aggCsv" style="font-fami
 const AGG_NOTE=`<div class="tkmeta">内訳書の末端行と単価表明細を 名称×規格×単位 で集約した一覧です（金額は集計していません）。<br>
 <b style="color:var(--accent-deep)">注意:</b> 単価表内の数量は「その表の単位当たり」の数量のため、合計数量は使用回数を乗じていない参考値です。</div>`;
 /* 分類別集計（材料・労務・機械）。材料のみ品目絞込みチップつき */
+/* コンクリート二次製品（プレキャスト製品）の判定:
+   製品系キーワード、または コンクリート＋可算単位（本/個/枚/基/組）。
+   鋼製・樹脂製等の同名製品は除外 */
+const PRECAST_HINT=/(プレキャスト|二次製品|セグメント|ボックスカルバート|ヒューム管|U字溝|U型|Ｕ型|L形|L型|側溝|水路|集水桝|街渠桝|桝|マンホール|間知ブロック|積ブロック|連節ブロック|境界ブロック|歩車道境界|縁石|縁塊|平板|インターロッキング|グレーチング|遠心力|函渠|蓋|杭(?!打)|擁壁|護岸ブロック)/;
+const NOT_CO=/(鋼製|スチール|ステンレス|アルミ|樹脂|プラスチック|塩ビ|ダクタイル|鋳鉄|FRP|ゴム|木製)/;
+function isPrecastCo(it){
+  const s=(it.name||'')+(it.spec||'');
+  if(NOT_CO.test(s))return false;
+  if(PRECAST_HINT.test(s))return true;
+  return /(コンクリート|生コン)/.test(s)&&/^(本|個|枚|基|組)$/.test(stripSp(z2h(it.unit||'')));
+}
+const reChip=re=>it=>re.test((it.name||'')+(it.spec||''));
 const MAT_CHIPS=[
   ['all','すべて',null],
-  ['concrete','コンクリート',/(コンクリート|生コン|モルタル)/],
-  ['steel','鋼材',/(鋼|鉄筋|矢板|ボルト|ナット|金網|ワイヤ|レール|番線)/],
-  ['asphalt','アスファルト',/(アスファルト|合材|乳剤|瀝青|プライムコート|タックコート)/],
-  ['stone','砕石・砂',/(砕石|クラッシャラン|粒度調整|砂|栗石|割石|捨石|骨材)/],
-  ['pipe','管材',/(管|パイプ|ヒューム|塩ビ|ダクタイル|コルゲート)/],
+  ['namacon','生コン・モルタル',it=>/(コンクリート|生コン|モルタル)/.test((it.name||'')+(it.spec||''))&&!isPrecastCo(it)],
+  ['precast','Co二次製品',isPrecastCo],
+  ['steel','鋼材',reChip(/(鋼|鉄筋|矢板|ボルト|ナット|金網|ワイヤ|レール|番線)/)],
+  ['asphalt','アスファルト',reChip(/(アスファルト|合材|乳剤|瀝青|プライムコート|タックコート)/)],
+  ['stone','砕石・砂',reChip(/(砕石|クラッシャラン|粒度調整|砂|栗石|割石|捨石|骨材)/)],
+  ['pipe','管材',reChip(/(管|パイプ|ヒューム|塩ビ|ダクタイル|コルゲート)/)],
 ];
 function showAgg(cat){
   if(!aggGuard())return;
@@ -1494,7 +1507,7 @@ function showAgg(cat){
   document.getElementById('mTag').textContent='集計';
   const render=fkey=>{
     const fdef=chips.find(f=>f[0]===fkey)||chips[0];
-    const current=fdef[2]?items.filter(it=>fdef[2].test(it.name+it.spec)):items;
+    const current=fdef[2]?items.filter(fdef[2]):items;
     document.getElementById('mTitle').textContent=`${cat}集計（数量）─ ${current.length} 品目`;
     let html=chips.length>1?'<div class="aggchips">'+
       chips.map(f=>`<button data-f="${f[0]}" class="${f[0]===fdef[0]?'on':''}">${f[1]}</button>`).join('')+'</div>':'';
