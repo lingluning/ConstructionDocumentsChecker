@@ -1391,7 +1391,7 @@ const DICT={
 };
 const DICTN={};for(const k in DICT)DICTN[k]=DICT[k].map(t=>[normName(t),t]);
 function dictHit(cat,n){const h=DICTN[cat].find(([tn])=>tn&&n.includes(tn));return h?h[1]:null;}
-function classify(name,unit){
+function classifyItem(name,unit){
   const n=normName(name),u=stripSp(z2h(unit||''));
   if(!n)return ['その他','—'];
   // 1) 単位の確定規則
@@ -1411,7 +1411,7 @@ function classify(name,unit){
   if(!u||u==='式')return ['その他','単位:式/なし'];
   return ['材料','推定（実物単位）'];
 }
-function catOf(name,unit){return classify(name,unit)[0];}
+function catOf(name,unit){return classifyItem(name,unit)[0];}
 /* 標準工種体系（新土木工事積算大系）との簡易対照 */
 const STD_KOSHU=['河川土工','道路土工','土工','舗装','排水構造物','側溝','カルバート','函渠','擁壁','石・ブロック積','法面','植生','植栽','構造物撤去','仮設','土留','仮締切','橋梁下部','橋梁上部','床版','支承','伸縮装置','高欄','防護柵','区画線','標識','照明','護岸','根固','水制','築堤','浚渫','地盤改良','固結','基礎杭','場所打杭','既製杭','矢板','深礎','ケーソン','トンネル','共同溝','電線共同溝','情報ボックス','管渠','管路','処理場','ポンプ場','配水管','送水管','機械設備','電気設備','造園','公園','維持','修繕','除草','清掃','雪寒','防雪','落石防護','吹付','アンカー','補強土','軽量盛土','切削オーバーレイ','打換'];
 function stdKoshu(name){
@@ -1433,7 +1433,7 @@ function aggregateItems(){
     const key=nm+'|'+sp+'|'+u;
     if(!map.has(key)){
       // 単価表を参照する行は複合的な施工項目（材料ではない）
-      const cw=isWork?['施工','単価表参照']:classify(nm,u);
+      const cw=isWork?['施工','単価表参照']:classifyItem(nm,u);
       map.set(key,{name:nm,spec:sp,unit:u,qty:0,qtyOk:true,count:0,srcs:new Set(),koshu:new Set(),cat:cw[0],why:cw[1]});
     }
     const e=map.get(key);
