@@ -28,6 +28,19 @@
   header .spacer{flex:1}
   .meta-pill{font-family:var(--mono);font-size:11px;color:var(--ink-soft);display:flex;gap:14px;flex-wrap:wrap}
   .meta-pill b{color:var(--ink);font-weight:700}
+  /* 上部ナビ（ドロップダウン） */
+  .topnav{display:flex;gap:4px;margin-left:10px}
+  .navdrop{position:relative}
+  .navbtn{font-family:var(--jp);font-size:12.5px;font-weight:700;border:1px solid var(--rule);
+    background:#fff;color:var(--ink);padding:5px 13px;border-radius:3px;cursor:pointer;transition:.12s}
+  .navbtn:hover,.navdrop.open .navbtn{border-color:var(--accent);color:var(--accent-deep)}
+  .navmenu{display:none;position:absolute;top:calc(100% + 4px);left:0;background:#fff;
+    border:1px solid var(--rule);border-radius:3px;box-shadow:0 8px 24px rgba(26,24,20,.18);
+    min-width:200px;z-index:60;padding:4px 0}
+  .navdrop.open .navmenu{display:block}
+  .navmenu button{display:block;width:100%;text-align:left;font-family:var(--jp);font-size:12.5px;
+    border:none;background:none;padding:8px 14px;cursor:pointer;color:var(--ink)}
+  .navmenu button:hover{background:var(--hl);color:var(--accent-deep)}
 
   #drop{flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;
     margin:30px;border:2px dashed var(--rule);border-radius:6px;transition:.18s;text-align:center;padding:40px;cursor:pointer}
@@ -188,6 +201,14 @@
 <header>
   <span class="mark">設計書 TREE v3</span>
   <h1>工事設計書 階層ビューア <small>UNIVERSAL PARSER</small></h1>
+  <nav class="topnav">
+    <div class="navdrop" id="aggDrop">
+      <button class="navbtn" id="aggMenuBtn">集計 ▾</button>
+      <div class="navmenu">
+        <button id="navMatAgg">材料集計（数量）</button>
+      </div>
+    </div>
+  </nav>
   <div class="spacer"></div>
   <div class="meta-pill" id="hdrMeta"></div>
 </header>
@@ -1338,6 +1359,99 @@ function openTanka(key){
   document.getElementById('mBody').querySelectorAll('[data-tanka]').forEach(el=>el.onclick=()=>openTanka(el.dataset.tanka));
   modal.classList.add('show');
 }
+
+/* ═══ 集計（辞書・単位ベースの要素分類）═══
+   AIを使わないルールベース分類。労務・機械・経費等を除外した残りを「材料」とみなす。 */
+const CAT_RULES=[
+  ['労務',/(作業員|世話役|とび工|型枠工|鉄筋工|溶接工|防水工|ブロック工|電工|配管工|塗装工|左官|大工|石工|潜水士|潜かん工|さく岩工|運転手|交通誘導|警備員|オペレータ|技師|技術員|測量|設計技術者)/],
+  ['機械',/(バックホ|ブルドーザ|クレーン|ダンプ|ローラ|フィニッシャ|ポンプ車|プラント|発電機|コンプレッサ|グレーダ|杭打|削岩|攪拌|圧入|バイブロ|クローラ|トラクタ|フォークリフト|高所作業車|散水車|タンク車|ウインチ|ホイスト|モンケン|アジテータ|ミキサ|機械損料|損料|賃料|運転経費|機械経費|軽油|ガソリン|重油|灯油|電力に関する料金)/],
+  ['経費等',/(諸雑費|雑費|雑材料|雑品|消費税|値引|割増|間接費|共通仮設|現場管理|一般管理|経費|歩掛|補正|端数処理)/],
+  ['施工',/(運搬|掘削|盛土|締固|敷均|設置|据付|組立|撤去|取壊|解体|床掘|埋戻|養生|切断|削孔|注入|打設|吹付|転圧|整地|清掃|処分|積込)/],
+];
+function catOf(name,unit){
+  const n=stripSp(z2h(name||''));
+  const u=stripSp(z2h(unit||''));
+  if(!n)return 'その他';
+  if(/^(人|人日)$/.test(u))return '労務';
+  if(/^(供用日|運転日|h|時間)$/.test(u))return '機械';
+  for(const [c,re] of CAT_RULES)if(re.test(n))return c;
+  if(/工$/.test(n))return '施工';   // 「〜工」は作業項目（労務職種名は上の辞書で判定済み）
+  if(!u||u==='式')return 'その他';  // 複合項目・経費類は材料に数えない
+  return '材料';
+}
+/* 内訳書の末端行＋単価表明細を 名称×規格×単位 で集約（数量を合算、金額は扱わない） */
+function aggregateItems(){
+  const map=new Map();
+  const add=(nm,sp,u,q,src)=>{
+    nm=(nm||'').trim();if(!nm)return;
+    sp=(sp||'').trim();u=(u||'').trim();
+    const key=nm+'|'+sp+'|'+u;
+    if(!map.has(key))map.set(key,{name:nm,spec:sp,unit:u,qty:0,qtyOk:true,count:0,srcs:new Set(),cat:catOf(nm,u)});
+    const e=map.get(key);
+    e.count++;e.srcs.add(src);
+    const t=parseFloat(stripSp(z2h(q||'')).replace(/,/g,''));
+    if(isFinite(t))e.qty+=t;
+    else if((q||'').trim())e.qtyOk=false;
+  };
+  const walk=ns=>{for(const n of ns){
+    if(n.children&&n.children.length)walk(n.children);
+    else add(n.name,n.spec,n.unit,n.qty,'内訳書');
+  }};
+  walk(MODEL.tree);
+  for(const [k,d] of Object.entries(MODEL.tanka))
+    for(const ln of d.lines)add(ln.nm,ln.sp,ln.u,ln.q,k);
+  return [...map.values()];
+}
+const fmtQty=q=>{const r=Math.round(q*1000)/1000;return r.toLocaleString('ja-JP',{maximumFractionDigits:3});};
+function showMaterialAgg(){
+  if(!MODEL.tree.length&&!Object.keys(MODEL.tanka).length){
+    alert('集計できるデータがありません。先にPDFまたはCSVを読み込んでください。');return;}
+  const all=aggregateItems();
+  const items=all.filter(it=>it.cat==='材料')
+    .sort((a,b)=>b.count-a.count||a.name.localeCompare(b.name,'ja'));
+  document.getElementById('mTag').textContent='集計';
+  document.getElementById('mTitle').textContent=`材料集計（数量）─ ${items.length} 品目`;
+  let html=`<div class="tkmeta">内訳書の末端行と単価表明細を 名称×規格×単位 で集約し、
+労務・機械・経費等をルールで除外した一覧です（金額は集計していません）。<br>
+<b style="color:var(--accent-deep)">注意:</b> 単価表内の数量は「その表の単位当たり」の数量のため、
+合計数量は使用回数を乗じていない参考値です。</div>`;
+  if(items.length){
+    html+='<table class="tk"><thead><tr><th>名称</th><th>規格</th><th>単位</th><th class="num">合計数量</th><th class="num">件数</th><th>出典</th></tr></thead><tbody>';
+    for(const it of items){
+      const srcs=[...it.srcs];
+      const srcTxt=srcs.slice(0,3).join('、')+(srcs.length>3?` ほか${srcs.length-3}件`:'');
+      html+=`<tr><td>${esc(it.name)}</td><td>${esc(it.spec)}</td><td>${esc(it.unit)}</td>
+        <td class="num">${fmtQty(it.qty)}${it.qtyOk?'':' ※'}</td>
+        <td class="num">${it.count}</td><td>${esc(srcTxt)}</td></tr>`;
+    }
+    html+='</tbody></table>';
+    if(items.some(it=>!it.qtyOk))
+      html+='<div class="tkmeta" style="margin-top:8px">※ 数値化できない数量表記を含むため一部未加算</div>';
+    html+=`<div style="margin-top:12px"><button id="aggCsv" style="font-family:var(--jp);font-size:12px;
+      padding:5px 14px;border:1px solid var(--rule);border-radius:3px;background:#fff;cursor:pointer">CSV保存</button></div>`;
+  }else{
+    html+='<p style="color:var(--ink-soft);font-size:12px">材料と判定できる項目がありませんでした。</p>';
+  }
+  document.getElementById('mBody').innerHTML=html;
+  const cb=document.getElementById('aggCsv');
+  if(cb)cb.onclick=()=>{
+    const rows=[['名称','規格','単位','合計数量','件数','出典']];
+    for(const it of items)rows.push([it.name,it.spec,it.unit,it.qty,it.count,[...it.srcs].join(' ')]);
+    const csv='\uFEFF'+rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+    a.download='材料集計_'+(MODEL.summary['工事名']||'設計書').slice(0,30)+'.csv';
+    a.click();URL.revokeObjectURL(a.href);
+  };
+  modal.classList.add('show');
+}
+function bindNav(){
+  const drop=document.getElementById('aggDrop');
+  document.getElementById('aggMenuBtn').onclick=e=>{e.stopPropagation();drop.classList.toggle('open');};
+  document.addEventListener('click',()=>drop.classList.remove('open'));
+  document.getElementById('navMatAgg').onclick=()=>{drop.classList.remove('open');showMaterialAgg();};
+}
+bindNav();
 
 /* ═══ Claude AI 分析 ═══
    ブラウザから Anthropic Messages API を直接呼び出す（CORS対応ヘッダ使用）。
