@@ -107,6 +107,10 @@
   table.tree th.num,table.tree td.cell.num,table.tree td.cell.money{padding-right:22px}
   table.tree th.col-note,table.tree td.col-note{padding-left:22px}
   table.tree.hide-money .col-price,table.tree.hide-money .col-money{display:none}
+  /* 単価表・明細層（Gaia内訳CSVの表種103/104/114/201/202/204）は淡色で内訳層と区別 */
+  table.tree tbody tr.sub{background:rgba(93,74,122,.035)}
+  table.tree tbody tr.sub .nm{font-weight:500;color:var(--ink-soft)}
+  table.tree tbody tr.sub .lvltag{opacity:.55}
   @keyframes rowin{from{opacity:0}to{opacity:1}}
   table.tree tbody tr.reveal{animation:rowin .25s ease}
   @media(prefers-reduced-motion:reduce){table.tree tbody tr.reveal{animation:none}}
@@ -883,7 +887,7 @@ function buildTree(rawItems,DIAG){
   return root.children;
 }
 const stackAt=(stack,lvl)=>stack.find(s=>s.level===lvl);
-const mkNode=(name,level,page)=>({name,level,page,spec:'',unit:'',qty:'',price:'',money:'',tanka:'',note:'',children:[]});
+const mkNode=(name,level,page)=>({name,level,page,spec:'',unit:'',qty:'',price:'',money:'',tanka:'',note:'',elem:'',hyoshu:'',children:[]});
 
 /* ── 折返し断片の吸収（(N号)・A 等の続き行が兄弟になった場合）── */
 function mergeFragments(nodes){
@@ -1040,11 +1044,16 @@ function csvTable(recs,hdrIdx){
   const nameCols=[],colFam={};
   hdr.forEach((c,j)=>{const f=famOf(c);if(f==='name')nameCols.push(j);if(f&&f!=='other')colFam[j]=f;});
   const lvlCol=hdr.findIndex(c=>/^(レベル|階層|階層レベル|LV)$/i.test(stripSp(z2h(c||''))));
+  // Gaia内訳CSV: 要素（公式の機労材分類）と表種（行種別コード）を取り込む
+  const elemCol=hdr.findIndex(c=>stripSp(z2h(c||''))==='要素');
+  const hyoCol=hdr.findIndex(c=>stripSp(z2h(c||''))==='表種');
   DIAG.layouts=[{anchors:hdr.map((c,j)=>({family:colFam[j]||'other',label:stripSp(c)||('列'+(j+1)),x:j})).filter(a=>a.family!=='other'),
     columnMode:nameCols.length>=2,nameAnchors:nameCols.map(j=>({label:stripSp(hdr[j])}))}];
   const root={children:[]};const stack=[{node:root,level:0}];
   for(let i=hdrIdx+1;i<recs.length;i++){
     const row=recs[i];
+    const hyo=hyoCol>=0?(row[hyoCol]||'').trim():'';
+    if(hyo==='206')continue; // 注記・質疑行はデータ化しない
     let name='',lv=1;
     if(nameCols.length>=2){
       let deepest=-1;
@@ -1060,6 +1069,8 @@ function csvTable(recs,hdrIdx){
     }
     if(lvlCol>=0&&/^\d+$/.test(stripSp(z2h(row[lvlCol]||''))))lv=+stripSp(z2h(row[lvlCol]));
     const node=mkNode(name,lv,1);
+    node.hyoshu=hyo;
+    if(elemCol>=0)node.elem=(row[elemCol]||'').trim();
     for(const j in colFam){
       const f=colFam[j],v=(row[j]||'').trim();
       if(!v||f==='name')continue;
@@ -1240,11 +1251,12 @@ function renderTree(){
   const tb=document.getElementById('treeBody');tb.innerHTML='';ROWREF=[];
   tb.addEventListener('animationend',e=>{if(e.target&&e.target.classList)e.target.classList.remove('reveal');});
   const colors=['var(--c1)','var(--c2)','var(--c3)','var(--c4)','var(--c5)','var(--c6)'];
+  const SUB_HYO=new Set(['103','104','114','201','202','204']); // 単価表・明細層の表種コード
   const walk=(nodes,depth,ancestors)=>{
     for(const n of nodes){
       const hasKids=n.children&&n.children.length;
       const tr=document.createElement('tr');
-      tr.className='lv'+Math.min(n.level,4);
+      tr.className='lv'+Math.min(n.level,4)+(SUB_HYO.has(n.hyoshu)?' sub':'');
       const indent=depth*18;
       const lbl=LEVEL_LABELS[n.level-1]||('L'+n.level);
       let cells=
@@ -1398,6 +1410,7 @@ function classifyItem(name,unit){
   if(/^(人|人日)$/.test(u))return ['労務','単位:'+u];
   if(/^(供用日|運転日|運転時間)$/.test(u))return ['機械','単位:'+u];
   if(/^(試料|供試体)$/.test(u))return ['試験・調査','単位:'+u];
+  if(u==='%'||u==='％')return ['経費等','単位:%（率分）'];
   // 2) 分類辞書（経費・試験を材料より先に判定: 「雑材料」「コンクリート試験」対策）
   for(const cat of ['経費等','試験・調査','労務','機械']){
     const t=dictHit(cat,n);if(t)return [cat,'辞書:'+t];
@@ -1423,41 +1436,79 @@ function stdKoshu(name){
   }
   return best;
 }
-/* 内訳書の末端行＋単価表明細を 名称×規格×単位 で集約（数量を合算、金額は扱わない）。
-   各項目に所属工種（内訳書の上位階層／単価表は参照元ノードの上位階層）と分類根拠を付与。 */
+/* 公式の要素列 → 分類カテゴリ対応（Gaia内訳CSV等） */
+const ELEM_MAP={'労務費':'労務','材料費':'材料','損料':'機械','賃料':'機械','機械費':'機械','機械経費':'機械','経費':'経費等','外注費':'外注','その他':'その他'};
+function nodeCatWhy(n){
+  if(n.elem&&ELEM_MAP[n.elem])return [ELEM_MAP[n.elem],'要素列:'+n.elem];
+  if(n.tanka)return ['施工','単価表参照'];
+  return classifyItem(n.name,n.unit);
+}
+/* 内訳書の末端行＋単価表明細を 名称×規格×単位 で集約（金額は扱わない）。
+   - 分類は 要素列（公式）＞単価表参照＞辞書・単位ルール の優先順位
+   - eqty（展開数量）: 階層の数量を連乗した実総量。単価表明細は
+     参照元の展開数量 ×単価表当り数量 ÷ 表単位の係数（「100m2当り」等）で換算 */
 function aggregateItems(){
   const map=new Map();
-  const add=(nm,sp,u,q,src,koshu,isWork)=>{
+  const num=v=>{const t=parseFloat(stripSp(z2h(v||'')).replace(/,/g,''));return isFinite(t)?t:null;};
+  const add=(nm,sp,u,q,src,koshu,cw,eq)=>{
     nm=(nm||'').trim();if(!nm)return;
     sp=(sp||'').trim();u=(u||'').trim();
     const key=nm+'|'+sp+'|'+u;
-    if(!map.has(key)){
-      // 単価表を参照する行は複合的な施工項目（材料ではない）
-      const cw=isWork?['施工','単価表参照']:classifyItem(nm,u);
-      map.set(key,{name:nm,spec:sp,unit:u,qty:0,qtyOk:true,count:0,srcs:new Set(),koshu:new Set(),cat:cw[0],why:cw[1]});
-    }
+    if(!map.has(key))map.set(key,{name:nm,spec:sp,unit:u,qty:0,qtyOk:true,eqty:0,eqOk:true,count:0,srcs:new Set(),koshu:new Set(),cat:cw[0],why:cw[1]});
     const e=map.get(key);
     e.count++;e.srcs.add(src);
     if(koshu)e.koshu.add(koshu);
-    const t=parseFloat(stripSp(z2h(q||'')).replace(/,/g,''));
-    if(isFinite(t))e.qty+=t;
+    const t=num(q);
+    if(t!=null)e.qty+=t;
     else if((q||'').trim())e.qtyOk=false;
+    if(eq!=null&&isFinite(eq))e.eqty+=eq;else e.eqOk=false;
   };
-  const refPath=new Map();
-  const walk=(ns,path)=>{for(const n of ns){
+  const refPath=new Map(),refEff=new Map();
+  const walk=(ns,path,eff)=>{for(const n of ns){
+    const qn=num(n.qty);
+    // 数量空欄は1扱い、数値化できない数量は以降の連鎖を無効化
+    const eff2=eff==null?null:(qn!=null?eff*qn:((n.qty||'').trim()?null:eff));
     const p=path.length?path.join('＞'):n.name;
     if(n.tanka){
       if(!refPath.has(n.tanka))refPath.set(n.tanka,new Set());
       refPath.get(n.tanka).add(p);
+      refEff.set(n.tanka,(refEff.get(n.tanka)||0)+(eff2==null?NaN:eff2));
     }
     const newPath=path.length<2?[...path,n.name]:path;
-    if(n.children&&n.children.length)walk(n.children,newPath);
-    else add(n.name,n.spec,n.unit,n.qty,'内訳書',path.join('＞'),!!n.tanka);
+    if(n.children&&n.children.length){
+      // 価格整合によるロット補正: 子の Σ(数量×単価) ÷ 親単価 ≈ 計算ロット。
+      // Gaia系内訳では施工単価が「1000m3当り」等のロットで計上されることがあり、
+      // その場合子の数量はロット当りのため、ロットで割って単位当りに正規化する。
+      let lot=1;
+      const pu=num(n.price);
+      if(pu){
+        let sum=0,ok=false;
+        for(const c of n.children){
+          const cq=num(c.qty),cp=num(c.price);
+          if(cq!=null&&cp!=null&&!/[%％]/.test(c.unit||'')){sum+=cq*cp;ok=true;}
+        }
+        if(ok&&sum>0){
+          const r=sum/pu;
+          for(const cand of [1,10,100,1000,10000])
+            if(Math.abs(r/cand-1)<=0.05){lot=cand;break;}
+          if(lot===1&&r>1.5&&isFinite(r))lot=r;
+        }
+      }
+      walk(n.children,newPath,eff2==null?null:eff2/lot);
+    }
+    else add(n.name,n.spec,n.unit,n.qty,'内訳書',path.join('＞'),nodeCatWhy(n),eff2);
   }};
-  walk(MODEL.tree,[]);
+  walk(MODEL.tree,[],1);
   for(const [k,d] of Object.entries(MODEL.tanka)){
     const kos=refPath.has(k)?[...refPath.get(k)].join('／'):'';
-    for(const ln of d.lines)add(ln.nm,ln.sp,ln.u,ln.q,k,kos);
+    const base=refEff.has(k)&&isFinite(refEff.get(k))?refEff.get(k):null;
+    const f=parseFloat(z2h(d.unit||''));
+    const uf=isFinite(f)&&f>0?f:1; // 「100m2当り」等の表単位係数
+    for(const ln of d.lines){
+      const qn=num(ln.q);
+      const eq=(base!=null&&qn!=null)?base*qn/uf:null;
+      add(ln.nm,ln.sp,ln.u,ln.q,k,kos,classifyItem(ln.nm,ln.u),eq);
+    }
   }
   return [...map.values()];
 }
@@ -1476,7 +1527,8 @@ function aggCsvSave(rows,fname){
 }
 const CSV_BTN='<div style="margin-top:12px"><button id="aggCsv" style="font-family:var(--jp);font-size:12px;padding:5px 14px;border:1px solid var(--rule);border-radius:3px;background:#fff;cursor:pointer">CSV保存</button></div>';
 const AGG_NOTE=`<div class="tkmeta">内訳書の末端行と単価表明細を 名称×規格×単位 で集約した一覧です（金額は集計していません）。<br>
-<b style="color:var(--accent-deep)">注意:</b> 単価表内の数量は「その表の単位当たり」の数量のため、合計数量は使用回数を乗じていない参考値です。</div>`;
+<b style="color:var(--accent-deep)">展開数量</b> は階層の数量を連乗した実総量の推定値（単価表明細は 参照元数量×当り数量÷表単位係数 で換算）。
+連鎖中に数値化できない数量がある場合は「－」表示。<b>合計数量</b> は行の数量を単純合算した参考値です。</div>`;
 /* 分類別集計（材料・労務・機械）。材料のみ品目絞込みチップつき */
 /* コンクリート二次製品（プレキャスト製品）の判定:
    製品系キーワード、または コンクリート＋可算単位（本/個/枚/基/組）。
@@ -1513,13 +1565,14 @@ function showAgg(cat){
       chips.map(f=>`<button data-f="${f[0]}" class="${f[0]===fdef[0]?'on':''}">${f[1]}</button>`).join('')+'</div>':'';
     html+=AGG_NOTE;
     if(current.length){
-      html+='<table class="tk"><thead><tr><th>名称</th><th>規格</th><th>単位</th><th class="num">合計数量</th><th class="num">件数</th><th>所属工種</th><th>出典</th></tr></thead><tbody>';
+      html+='<table class="tk"><thead><tr><th>名称</th><th>規格</th><th>単位</th><th class="num">展開数量</th><th class="num">合計数量</th><th class="num">件数</th><th>所属工種</th><th>出典</th></tr></thead><tbody>';
       for(const it of current){
         const srcs=[...it.srcs];
         const srcTxt=srcs.slice(0,3).join('、')+(srcs.length>3?` ほか${srcs.length-3}件`:'');
         const kos=[...it.koshu].filter(Boolean);
         const kosTxt=trunc(kos.slice(0,2).join('／')+(kos.length>2?` ほか${kos.length-2}`:''),40);
         html+=`<tr><td title="分類根拠: ${esc(it.why)}">${esc(it.name)}</td><td>${esc(it.spec)}</td><td>${esc(it.unit)}</td>
+          <td class="num"><b>${it.eqOk?fmtQty(it.eqty):'－'}</b></td>
           <td class="num">${fmtQty(it.qty)}${it.qtyOk?'':' ※'}</td>
           <td class="num">${it.count}</td><td>${esc(kosTxt)}</td><td>${esc(srcTxt)}</td></tr>`;
       }
@@ -1535,8 +1588,8 @@ function showAgg(cat){
     body.querySelectorAll('.aggchips button').forEach(b=>b.onclick=()=>render(b.dataset.f));
     const cb=document.getElementById('aggCsv');
     if(cb)cb.onclick=()=>{
-      const rows=[['名称','規格','単位','合計数量','件数','所属工種','出典','分類根拠']];
-      for(const it of current)rows.push([it.name,it.spec,it.unit,it.qty,it.count,
+      const rows=[['名称','規格','単位','展開数量','合計数量','件数','所属工種','出典','分類根拠']];
+      for(const it of current)rows.push([it.name,it.spec,it.unit,it.eqOk?it.eqty:'',it.qty,it.count,
         [...it.koshu].filter(Boolean).join('／'),[...it.srcs].join(' '),it.why]);
       aggCsvSave(rows,(fdef[0]!=='all'?fdef[1]:cat)+'集計');
     };
@@ -1545,7 +1598,7 @@ function showAgg(cat){
   modal.classList.add('show');
 }
 /* 工種別サマリ（最上位階層ごとの項目数と分類内訳。標準工種体系との対照つき） */
-const KOSHU_CATS=['材料','労務','機械','施工','試験・調査','経費等','その他'];
+const KOSHU_CATS=['材料','労務','機械','外注','施工','試験・調査','経費等','その他'];
 function showKoshuSummary(){
   if(!aggGuard())return;
   const rows=[];
@@ -1555,7 +1608,7 @@ function showKoshuSummary(){
     const walk=n=>{
       if(n.tanka)refs.add(n.tanka);
       if(n.children&&n.children.length)n.children.forEach(walk);
-      else{leaves++;cnt[n.tanka?'施工':catOf(n.name,n.unit)]++;}
+      else{leaves++;cnt[nodeCatWhy(n)[0]]++;}
     };
     walk(top);
     for(const k of refs){
@@ -1592,14 +1645,14 @@ function showCatList(){
   const cnt={};for(const it of items)cnt[it.cat]=(cnt[it.cat]||0)+1;
   let html='<div class="tkmeta">全項目の自動分類と根拠の一覧です。誤分類があれば名称を控えて辞書を調整してください。<br>'+
     KOSHU_CATS.filter(c=>cnt[c]).map(c=>`${c}: ${cnt[c]}`).join(' ／ ')+'</div>';
-  html+='<table class="tk"><thead><tr><th>分類</th><th>根拠</th><th>名称</th><th>規格</th><th>単位</th><th class="num">件数</th></tr></thead><tbody>';
+  html+='<table class="tk"><thead><tr><th>分類</th><th>根拠</th><th>名称</th><th>規格</th><th>単位</th><th class="num">展開数量</th><th class="num">件数</th></tr></thead><tbody>';
   for(const it of items)
-    html+=`<tr><td><b>${esc(it.cat)}</b></td><td style="font-size:10.5px;color:var(--ink-soft)">${esc(it.why)}</td><td>${esc(it.name)}</td><td>${esc(trunc(it.spec,24))}</td><td>${esc(it.unit)}</td><td class="num">${it.count}</td></tr>`;
+    html+=`<tr><td><b>${esc(it.cat)}</b></td><td style="font-size:10.5px;color:var(--ink-soft)">${esc(it.why)}</td><td>${esc(it.name)}</td><td>${esc(trunc(it.spec,24))}</td><td>${esc(it.unit)}</td><td class="num">${it.eqOk?fmtQty(it.eqty):'－'}</td><td class="num">${it.count}</td></tr>`;
   html+='</tbody></table>'+CSV_BTN;
   document.getElementById('mBody').innerHTML=html;
   document.getElementById('aggCsv').onclick=()=>{
-    const rows=[['分類','根拠','名称','規格','単位','合計数量','件数']];
-    for(const it of items)rows.push([it.cat,it.why,it.name,it.spec,it.unit,it.qty,it.count]);
+    const rows=[['分類','根拠','名称','規格','単位','展開数量','合計数量','件数']];
+    for(const it of items)rows.push([it.cat,it.why,it.name,it.spec,it.unit,it.eqOk?it.eqty:'',it.qty,it.count]);
     aggCsvSave(rows,'分類チェック一覧');
   };
   modal.classList.add('show');
