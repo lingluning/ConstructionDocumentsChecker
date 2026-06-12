@@ -188,6 +188,10 @@
   .aggchips button:last-child{border-right:none}
   .aggchips button:hover{color:var(--accent-deep)}
   .aggchips button.on{background:var(--accent);color:#fff}
+  .modal table.tk td.exp{cursor:pointer}
+  .modal table.tk td.exp:hover{background:var(--hl)}
+  .modal table.tk td.exp .more{color:var(--accent-deep);font-size:10px;margin-left:5px;white-space:nowrap}
+  .modal table.tk td.exp.open{white-space:normal;line-height:1.8}
   .aipanel{margin:8px 22px;border:1px solid var(--accent);border-left:4px solid var(--accent);
     background:#fff;border-radius:4px;display:none}
   .aipanel.show{display:block}
@@ -1566,16 +1570,20 @@ function showAgg(cat){
     html+=AGG_NOTE;
     if(current.length){
       html+='<table class="tk"><thead><tr><th>名称</th><th>規格</th><th>単位</th><th class="num">展開数量</th><th class="num">合計数量</th><th class="num">件数</th><th>所属工種</th><th>出典</th></tr></thead><tbody>';
-      for(const it of current){
+      current.forEach((it,i)=>{
         const srcs=[...it.srcs];
-        const srcTxt=srcs.slice(0,3).join('、')+(srcs.length>3?` ほか${srcs.length-3}件`:'');
         const kos=[...it.koshu].filter(Boolean);
-        const kosTxt=trunc(kos.slice(0,2).join('／')+(kos.length>2?` ほか${kos.length-2}`:''),40);
+        const sMore=srcs.length>3;
+        const kMore=kos.length>2||kos.slice(0,2).join('／').length>40;
+        const srcTxt=esc(srcs.slice(0,3).join('、')+(sMore?` ほか${srcs.length-3}件`:''));
+        const kosTxt=esc(trunc(kos.slice(0,2).join('／')+(kos.length>2?` ほか${kos.length-2}`:''),40));
         html+=`<tr><td title="分類根拠: ${esc(it.why)}">${esc(it.name)}</td><td>${esc(it.spec)}</td><td>${esc(it.unit)}</td>
           <td class="num"><b>${it.eqOk?fmtQty(it.eqty):'－'}</b></td>
           <td class="num">${fmtQty(it.qty)}${it.qtyOk?'':' ※'}</td>
-          <td class="num">${it.count}</td><td>${esc(kosTxt)}</td><td>${esc(srcTxt)}</td></tr>`;
-      }
+          <td class="num">${it.count}</td>
+          <td${kMore?` class="exp" data-i="${i}" data-t="k" title="クリックで全件表示"`:''}>${kosTxt}${kMore?'<span class="more">▾</span>':''}</td>
+          <td${sMore?` class="exp" data-i="${i}" data-t="s" title="クリックで全件表示"`:''}>${srcTxt}${sMore?'<span class="more">▾</span>':''}</td></tr>`;
+      });
       html+='</tbody></table>';
       if(current.some(it=>!it.qtyOk))
         html+='<div class="tkmeta" style="margin-top:8px">※ 数値化できない数量表記を含むため一部未加算</div>';
@@ -1586,6 +1594,21 @@ function showAgg(cat){
     const body=document.getElementById('mBody');
     body.innerHTML=html;
     body.querySelectorAll('.aggchips button').forEach(b=>b.onclick=()=>render(b.dataset.f));
+    // 「ほかN件」セル: クリックで全件表示⇔省略表示を切替
+    body.querySelectorAll('td.exp').forEach(td=>{
+      td.onclick=()=>{
+        const it=current[+td.dataset.i];
+        const arr=td.dataset.t==='k'?[...it.koshu].filter(Boolean):[...it.srcs];
+        if(td.classList.toggle('open')){
+          td.innerHTML=arr.map(esc).join('<br>')+'<span class="more">▴ 閉じる</span>';
+        }else{
+          const sMore=arr.length>3,kMore=arr.length>2||arr.slice(0,2).join('／').length>40;
+          td.innerHTML=td.dataset.t==='k'
+            ?esc(trunc(arr.slice(0,2).join('／')+(arr.length>2?` ほか${arr.length-2}`:''),40))+(kMore?'<span class="more">▾</span>':'')
+            :esc(arr.slice(0,3).join('、')+(sMore?` ほか${arr.length-3}件`:''))+(sMore?'<span class="more">▾</span>':'');
+        }
+      };
+    });
     const cb=document.getElementById('aggCsv');
     if(cb)cb.onclick=()=>{
       const rows=[['名称','規格','単位','展開数量','合計数量','件数','所属工種','出典','分類根拠']];
