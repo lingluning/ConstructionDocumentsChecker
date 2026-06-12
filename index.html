@@ -49,6 +49,8 @@
   .toolbar button{font-family:var(--jp);font-size:12px;border:1px solid var(--rule);
     background:#fff;color:var(--ink);padding:5px 11px;border-radius:3px;cursor:pointer;transition:.12s}
   .toolbar button:hover{border-color:var(--accent);color:var(--accent-deep)}
+  .toolbar button.ai{border-color:var(--accent);color:var(--accent-deep);font-weight:700}
+  .toolbar button.ai:hover{background:var(--accent);color:#fff}
   .toolbar .lvl-btns{display:flex;gap:0;border:1px solid var(--rule);border-radius:3px;overflow:hidden}
   .toolbar .lvl-btns button{border:none;border-right:1px solid var(--rule);border-radius:0;padding:5px 9px}
   .toolbar .lvl-btns button:last-child{border-right:none}
@@ -126,27 +128,55 @@
   .tanka-link:hover{background:var(--accent);color:#fff}
   .tanka-link.dead{border-color:var(--rule);color:var(--rule);cursor:default}
 
-  #modal{display:none;position:fixed;inset:0;background:rgba(26,24,20,.55);z-index:50;
+  .modal{display:none;position:fixed;inset:0;background:rgba(26,24,20,.55);z-index:50;
     align-items:center;justify-content:center;padding:30px}
-  #modal.show{display:flex}
-  #modal .panel{background:var(--paper);border-radius:6px;max-width:780px;width:100%;max-height:86vh;
+  .modal.show{display:flex}
+  .modal .panel{background:var(--paper);border-radius:6px;max-width:780px;width:100%;max-height:86vh;
     overflow:auto;border:2px solid var(--ink);box-shadow:0 18px 60px rgba(0,0,0,.3)}
-  #modal .phead{position:sticky;top:0;background:var(--ink);color:var(--paper);padding:12px 18px;
+  .modal .phead{position:sticky;top:0;background:var(--ink);color:var(--paper);padding:12px 18px;
     display:flex;align-items:center;gap:12px;z-index:2}
-  #modal .phead .tag{font-family:var(--mono);background:var(--accent);padding:2px 8px;border-radius:2px;font-size:12px}
-  #modal .phead h3{font-size:14px;flex:1}
-  #modal .phead .x{cursor:pointer;font-size:20px;line-height:1;padding:0 4px}
-  #modal .pbody{padding:16px 18px}
-  #modal table.tk{width:100%;border-collapse:collapse;font-size:12px;background:#fff;border:1px solid var(--rule)}
-  #modal table.tk th{background:var(--paper-line);padding:6px 8px;text-align:left;font-size:11px;font-weight:700}
-  #modal table.tk th.num{text-align:right}
-  #modal table.tk td{padding:5px 8px;border-bottom:1px solid var(--grid)}
-  #modal table.tk td.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
-  #modal .tkmeta{font-family:var(--mono);font-size:11px;color:var(--ink-soft);margin-bottom:12px;line-height:1.8}
-  #modal .raw{white-space:pre-wrap;font-family:var(--mono);font-size:11px;color:var(--ink-soft);
+  .modal .phead .tag{font-family:var(--mono);background:var(--accent);padding:2px 8px;border-radius:2px;font-size:12px}
+  .modal .phead h3{font-size:14px;flex:1}
+  .modal .phead .x{cursor:pointer;font-size:20px;line-height:1;padding:0 4px}
+  .modal .pbody{padding:16px 18px}
+  .modal table.tk{width:100%;border-collapse:collapse;font-size:12px;background:#fff;border:1px solid var(--rule)}
+  .modal table.tk th{background:var(--paper-line);padding:6px 8px;text-align:left;font-size:11px;font-weight:700}
+  .modal table.tk th.num{text-align:right}
+  .modal table.tk td{padding:5px 8px;border-bottom:1px solid var(--grid)}
+  .modal table.tk td.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .modal .tkmeta{font-family:var(--mono);font-size:11px;color:var(--ink-soft);margin-bottom:12px;line-height:1.8}
+  .modal .raw{white-space:pre-wrap;font-family:var(--mono);font-size:11px;color:var(--ink-soft);
     background:#fff;border:1px solid var(--grid);border-radius:4px;padding:10px;margin-top:8px;max-height:240px;overflow:auto}
   .err{margin:30px;padding:16px;border:1px solid var(--accent);background:var(--hl);
     border-radius:4px;color:var(--accent-deep);font-size:13px;line-height:1.7}
+  /* AI分析 */
+  .modal .pbody label{display:block;font-size:12px;font-weight:700;margin:12px 0 4px}
+  .modal .pbody label:first-child{margin-top:0}
+  .modal .pbody input[type=password],.modal .pbody textarea{width:100%;font-family:var(--jp);
+    font-size:12.5px;padding:7px 10px;border:1px solid var(--rule);border-radius:3px;background:#fff}
+  .modal .pbody input[type=password]{font-family:var(--mono)}
+  .modal .pbody textarea{min-height:150px;line-height:1.7;resize:vertical}
+  .modal .pbody .note{font-size:11.5px;color:var(--ink-soft);line-height:1.7;margin-top:10px}
+  .modal .pbody .note b{color:var(--accent-deep)}
+  .modal .pbody .actions{display:flex;gap:10px;align-items:center;margin-top:14px}
+  .modal .pbody .actions button{font-family:var(--jp);font-size:13px;padding:7px 18px;
+    border-radius:3px;border:1px solid var(--rule);background:#fff;cursor:pointer}
+  .modal .pbody .actions button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+  .modal .pbody .actions button.primary:hover{background:var(--accent-deep)}
+  .modal .pbody .chk{font-size:12px;display:flex;align-items:center;gap:6px;margin-top:8px}
+  .aipanel{margin:8px 22px;border:1px solid var(--accent);border-left:4px solid var(--accent);
+    background:#fff;border-radius:4px;display:none}
+  .aipanel.show{display:block}
+  .aipanel .ahead{display:flex;align-items:center;gap:10px;padding:9px 16px;
+    border-bottom:1px solid var(--paper-line);background:var(--hl)}
+  .aipanel .ahead .t{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--accent-deep);flex:1}
+  .aipanel .ahead button{font-family:var(--jp);font-size:11.5px;border:1px solid var(--rule);
+    background:#fff;padding:3px 10px;border-radius:3px;cursor:pointer}
+  .aipanel .ahead button:hover{border-color:var(--accent);color:var(--accent-deep)}
+  .aipanel .aiout{padding:14px 18px;font-size:13px;line-height:1.8;white-space:pre-wrap;
+    max-height:60vh;overflow:auto;font-family:var(--jp)}
+  .aipanel .aistat{font-family:var(--mono);font-size:10.5px;color:var(--ink-soft);
+    padding:6px 16px;border-top:1px dotted var(--paper-line)}
   .rawpage{margin:14px 22px;border:1px solid var(--rule);background:#fff;border-radius:4px;padding:12px}
   .rawpage h4{font-family:var(--mono);font-size:11px;color:var(--ink-soft);margin-bottom:6px}
   .rawpage pre{white-space:pre-wrap;font-family:var(--mono);font-size:11px;line-height:1.6;color:var(--ink)}
@@ -185,6 +215,7 @@
     <button id="collapseAll">全収束</button>
     <button id="diagBtn">解析レポート</button>
     <button id="moneyBtn">単価・金額を隠す</button>
+    <button id="aiBtn" class="ai">AI分析</button>
     <span class="grow"></span>
     <input type="search" id="search" placeholder="名称・規格で絞り込み…">
     <span class="stat" id="stat"></span>
@@ -193,12 +224,23 @@
   <div id="scroll">
     <div id="summaryHolder"></div>
     <div class="diag" id="diagPanel"></div>
+    <div class="aipanel" id="aiPanel">
+      <div class="ahead">
+        <span class="t" id="aiStatus">AI分析</span>
+        <button id="aiAbort" style="display:none">中止</button>
+        <button id="aiCopy">コピー</button>
+        <button id="aiSave">.md保存</button>
+        <button id="aiClose">×</button>
+      </div>
+      <div class="aiout" id="aiOut"></div>
+      <div class="aistat" id="aiUsage"></div>
+    </div>
     <div id="mainHolder"></div>
-    <div class="footnote">純フロントエンド・PDF.js解析 ／ データはブラウザ内で完結し外部送信されません</div>
+    <div class="footnote">純フロントエンド・PDF.js解析 ／ 解析データはブラウザ内で完結（AI分析を実行した場合のみ、表データがAnthropic APIへ送信されます）</div>
   </div>
 </div>
 
-<div id="modal">
+<div id="modal" class="modal">
   <div class="panel">
     <div class="phead">
       <span class="tag" id="mTag"></span>
@@ -206,6 +248,31 @@
       <span class="x" id="mClose">×</span>
     </div>
     <div class="pbody" id="mBody"></div>
+  </div>
+</div>
+
+<div id="aiModal" class="modal">
+  <div class="panel">
+    <div class="phead">
+      <span class="tag">AI</span>
+      <h3>Claude による設計書分析</h3>
+      <span class="x" id="aiModalClose">×</span>
+    </div>
+    <div class="pbody">
+      <label for="aiKey">Anthropic API キー</label>
+      <input type="password" id="aiKey" placeholder="sk-ant-api03-…" autocomplete="off">
+      <div class="chk"><input type="checkbox" id="aiKeySave" checked><label for="aiKeySave" style="margin:0;font-weight:400">このブラウザに保存する（localStorage）</label></div>
+      <label for="aiPrompt">分析指示（編集可）</label>
+      <textarea id="aiPrompt"></textarea>
+      <div class="note" id="aiScope"></div>
+      <div class="note"><b>送信についての注意:</b> 分析開始を押すと、解析済みの表データ（下記の概算量）が
+        Anthropic API（api.anthropic.com）へ送信されます。データはこの分析のためだけに使用されます。
+        入札前の設計書など機密性の高いデータの送信可否はご自身でご判断ください。</div>
+      <div class="actions">
+        <button class="primary" id="aiStart">分析開始</button>
+        <button id="aiCancel">キャンセル</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1241,7 +1308,8 @@ function bindToolbar(){
 const modal=document.getElementById('modal');
 document.getElementById('mClose').onclick=()=>modal.classList.remove('show');
 modal.onclick=e=>{if(e.target===modal)modal.classList.remove('show');};
-document.addEventListener('keydown',e=>{if(e.key==='Escape')modal.classList.remove('show');});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){modal.classList.remove('show');
+  const am=document.getElementById('aiModal');if(am)am.classList.remove('show');}});
 function openTanka(key){
   const d=MODEL.tanka[key];
   document.getElementById('mTag').textContent=key;
@@ -1270,6 +1338,155 @@ function openTanka(key){
   document.getElementById('mBody').querySelectorAll('[data-tanka]').forEach(el=>el.onclick=()=>openTanka(el.dataset.tanka));
   modal.classList.add('show');
 }
+
+/* ═══ Claude AI 分析 ═══
+   ブラウザから Anthropic Messages API を直接呼び出す（CORS対応ヘッダ使用）。
+   APIキーは localStorage にのみ保存され、リポジトリやサーバには置かない。 */
+const AI_MODEL='claude-opus-4-8';
+const AI_KEY_STORE='anthropic_api_key';
+const AI_DEFAULT_PROMPT=`この工事設計書データを分析し、以下を日本語のMarkdownで出力してください。
+
+1. 工事費の構成概要（主要工種と金額・構成比）
+2. 施工量一覧表（工種・種別ごとの主要数量と単位）
+3. 使用機械設備一覧表（単価表の明細等から抽出。名称・規格・想定される使用工種）
+4. 使用材料一覧表（材料名・規格・数量・単位・使用工種）
+5. 特記事項（数量・単価・構成で注意すべき点）
+
+各表はMarkdownの表形式とし、根拠（内訳書の行名や単価表番号）を備考欄に記載してください。
+データから読み取れない項目は推測せず「記載なし」としてください。`;
+let AI_ABORT=null,AI_TEXT='';
+
+function serializeModel(){
+  const L=[];const s=MODEL.summary;
+  for(const k of ['工事名','工事地名','発注者','受注者','工期','主工種','予定価格','工事価格'])
+    if(s[k])L.push(k+': '+s[k]);
+  L.push('','【内訳書ツリー】（インデント=階層 / 列: 名称\\t規格\\t数量\\t単位\\t単価\\t金額\\t単価表参照）');
+  const walk=(ns,d)=>{for(const n of ns){
+    L.push('  '.repeat(d)+[n.name,n.spec,n.qty,n.unit,n.price,n.money,n.tanka].join('\t'));
+    walk(n.children,d+1);}};
+  walk(MODEL.tree,0);
+  const tk=Object.entries(MODEL.tanka);
+  if(tk.length){
+    L.push('','【単価表明細】（列: 名称\\t規格\\t数量\\t単位\\t単価\\t金額）');
+    for(const [k,d] of tk){
+      L.push(`■${k} ${d.title}${d.unit?'（単位:'+d.unit+'）':''}`);
+      for(const ln of d.lines)L.push('  '+[ln.nm,ln.sp,ln.q,ln.u,ln.pr,ln.mo].join('\t'));
+    }
+  }
+  let text=L.join('\n');
+  const CAP=300000;
+  if(text.length>CAP)text=text.slice(0,CAP)+'\n…（データが大きいため以降を省略しました。省略部分は分析対象外です）';
+  return text;
+}
+function openAiDialog(){
+  if(!MODEL.tree.length&&!Object.keys(MODEL.tanka).length){
+    alert('分析できるデータがありません。先にPDFまたはCSVを読み込んでください。');return;}
+  document.getElementById('aiKey').value=localStorage.getItem(AI_KEY_STORE)||'';
+  const pr=document.getElementById('aiPrompt');
+  if(!pr.value.trim())pr.value=AI_DEFAULT_PROMPT;
+  const data=serializeModel();
+  document.getElementById('aiScope').innerHTML=
+    `送信対象: ツリー ${flatten(MODEL.tree).length} 項目 ／ 単価表 ${Object.keys(MODEL.tanka).length} 件 ／ 約 ${Math.round(data.length/1000)}千文字（モデル: ${AI_MODEL}）`;
+  document.getElementById('aiModal').classList.add('show');
+}
+async function startAnalysis(){
+  const key=document.getElementById('aiKey').value.trim();
+  if(!key){alert('APIキーを入力してください。');return;}
+  if(document.getElementById('aiKeySave').checked)localStorage.setItem(AI_KEY_STORE,key);
+  else localStorage.removeItem(AI_KEY_STORE);
+  const prompt=document.getElementById('aiPrompt').value.trim()||AI_DEFAULT_PROMPT;
+  document.getElementById('aiModal').classList.remove('show');
+  const panel=document.getElementById('aiPanel'),out=document.getElementById('aiOut'),
+    st=document.getElementById('aiStatus'),us=document.getElementById('aiUsage'),
+    ab=document.getElementById('aiAbort');
+  panel.classList.add('show');out.textContent='';us.textContent='';AI_TEXT='';
+  st.textContent='分析中…';ab.style.display='';
+  AI_ABORT=new AbortController();
+  let inTok=0,outTok=0;
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',signal:AI_ABORT.signal,
+      headers:{
+        'content-type':'application/json',
+        'x-api-key':key,
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true'
+      },
+      body:JSON.stringify({
+        model:AI_MODEL,max_tokens:64000,stream:true,
+        thinking:{type:'adaptive'},
+        system:'あなたは日本の土木・建築工事の積算と施工計画に精通した技術者です。設計書データを正確に読み取り、根拠を明示して分析します。データにない事項は推測せず、その旨を明記します。',
+        messages:[{role:'user',content:prompt+'\n\n────── 設計書データ ──────\n'+serializeModel()}]
+      })
+    });
+    if(!res.ok){
+      let m='HTTP '+res.status;
+      try{const j=await res.json();if(j.error&&j.error.message)m=j.error.message;}catch(e){}
+      throw new Error(m);
+    }
+    const reader=res.body.getReader();const dec=new TextDecoder();let buf='';
+    let stop='';
+    while(true){
+      const {done,value}=await reader.read();
+      if(done)break;
+      buf+=dec.decode(value,{stream:true});
+      const lines=buf.split('\n');buf=lines.pop();
+      for(const line of lines){
+        if(!line.startsWith('data:'))continue;
+        const payload=line.slice(5).trim();
+        if(!payload||payload==='[DONE]')continue;
+        let ev;try{ev=JSON.parse(payload);}catch(e){continue;}
+        if(ev.type==='message_start'&&ev.message&&ev.message.usage)
+          inTok=ev.message.usage.input_tokens||0;
+        else if(ev.type==='content_block_delta'&&ev.delta&&ev.delta.type==='text_delta'){
+          AI_TEXT+=ev.delta.text;out.textContent=AI_TEXT;
+        }else if(ev.type==='message_delta'){
+          if(ev.usage&&ev.usage.output_tokens)outTok=ev.usage.output_tokens;
+          if(ev.delta&&ev.delta.stop_reason)stop=ev.delta.stop_reason;
+        }else if(ev.type==='error'&&ev.error){
+          throw new Error(ev.error.message||'ストリームエラー');
+        }
+      }
+    }
+    if(stop==='refusal')st.textContent='AI分析 — モデルが回答を辞退しました';
+    else if(stop==='max_tokens')st.textContent='AI分析 — 出力上限に達しました（途中まで）';
+    else st.textContent='AI分析 — 完了';
+    us.textContent=`model: ${AI_MODEL} ／ 入力 ${inTok.toLocaleString()} tok ／ 出力 ${outTok.toLocaleString()} tok`;
+  }catch(err){
+    if(err.name==='AbortError'){st.textContent='AI分析 — 中止しました';}
+    else{
+      st.textContent='AI分析 — エラー';
+      out.textContent=(AI_TEXT?AI_TEXT+'\n\n':'')+'⚠ '+err.message;
+      console.error(err);
+    }
+  }finally{
+    ab.style.display='none';AI_ABORT=null;
+  }
+}
+function bindAi(){
+  document.getElementById('aiBtn').onclick=openAiDialog;
+  document.getElementById('aiModalClose').onclick=()=>document.getElementById('aiModal').classList.remove('show');
+  document.getElementById('aiCancel').onclick=()=>document.getElementById('aiModal').classList.remove('show');
+  const am=document.getElementById('aiModal');
+  am.onclick=e=>{if(e.target===am)am.classList.remove('show');};
+  document.getElementById('aiStart').onclick=startAnalysis;
+  document.getElementById('aiAbort').onclick=()=>{if(AI_ABORT)AI_ABORT.abort();};
+  document.getElementById('aiClose').onclick=()=>document.getElementById('aiPanel').classList.remove('show');
+  document.getElementById('aiCopy').onclick=()=>{
+    navigator.clipboard.writeText(AI_TEXT).then(()=>{
+      const b=document.getElementById('aiCopy');b.textContent='コピー済';
+      setTimeout(()=>b.textContent='コピー',1200);
+    });
+  };
+  document.getElementById('aiSave').onclick=()=>{
+    const blob=new Blob([AI_TEXT],{type:'text/markdown'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='AI分析_'+(MODEL.summary['工事名']||'設計書').slice(0,30)+'.md';
+    a.click();URL.revokeObjectURL(a.href);
+  };
+}
+bindAi();
 
 /* utils */
 function esc(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
